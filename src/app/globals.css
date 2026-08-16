@@ -1,0 +1,170 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html {
+    color-scheme: dark;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  body {
+    @apply bg-nova-black text-nova-text antialiased;
+    /* Rajdhani runs small and light; nudge both up for comfortable reading. */
+    font-size: 1.0625rem;
+    font-weight: 500;
+  }
+
+  h1,
+  h2,
+  h3 {
+    @apply font-display tracking-tight;
+  }
+
+  /* Figures should line up in tables and stat cards. */
+  .tabular-nums,
+  table {
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* Member pages are used one-handed on a phone; keep tap targets thumb-sized. */
+  button,
+  a[role="button"] {
+    touch-action: manipulation;
+  }
+
+  :focus-visible {
+    @apply outline-none ring-2 ring-nova-red ring-offset-2 ring-offset-nova-black;
+  }
+
+  ::selection {
+    background: rgba(255, 30, 60, 0.3);
+  }
+}
+
+@layer components {
+  /* Ambient backdrop: a faint technical grid with a red bloom top-left.
+     Fixed, pointer-events-none, painted once — costs nothing to scroll. */
+  .nova-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 0;
+    pointer-events: none;
+    background-image:
+      radial-gradient(60rem 40rem at 15% -10%, rgba(255, 30, 60, 0.13), transparent 60%),
+      radial-gradient(50rem 40rem at 100% 0%, rgba(255, 30, 60, 0.06), transparent 55%),
+      linear-gradient(rgba(255, 255, 255, 0.022) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(255, 255, 255, 0.022) 1px, transparent 1px);
+    background-size: 100% 100%, 100% 100%, 44px 44px, 44px 44px;
+  }
+
+  .nova-card {
+    @apply relative rounded-2xl border border-nova-border bg-nova-card p-4 shadow-nova;
+    background-image: theme("backgroundImage.nova-sheen");
+  }
+
+  /* Accent rail down the left edge — used for the "today" and active states. */
+  .nova-card-accent {
+    @apply border-nova-red/35;
+    box-shadow: theme("boxShadow.glowSoft");
+  }
+
+  .nova-card-accent::before {
+    content: "";
+    @apply absolute inset-y-4 left-0 w-[3px] rounded-full bg-nova-red;
+  }
+
+  .nova-label {
+    @apply font-display text-[10px] font-semibold uppercase tracking-widest text-nova-muted;
+  }
+
+  .nova-input {
+    @apply w-full rounded-xl border border-nova-border bg-nova-surface px-4 py-3 text-base
+           font-medium text-nova-text transition-colors placeholder:font-normal
+           placeholder:text-nova-muted focus:border-nova-red focus:bg-nova-elevated
+           focus:outline-none;
+  }
+
+  .nova-btn {
+    @apply inline-flex min-h-[46px] items-center justify-center gap-2 rounded-xl px-5 py-3
+           font-display text-[13px] font-bold uppercase tracking-wider transition-all
+           disabled:cursor-not-allowed disabled:opacity-45;
+  }
+
+  .nova-btn-primary {
+    @apply nova-btn bg-nova-red text-white shadow-glow hover:bg-nova-redDeep
+           active:scale-[0.985];
+    background-image: theme("backgroundImage.nova-red");
+  }
+
+  .nova-btn-ghost {
+    @apply nova-btn border border-nova-border bg-white/[0.03] text-nova-text
+           hover:border-nova-borderBright hover:bg-white/[0.07] active:scale-[0.985];
+  }
+
+  .nova-pill {
+    @apply inline-flex items-center rounded-full border px-2.5 py-1 font-display text-[10px]
+           font-bold uppercase tracking-wider;
+  }
+
+  /* Travelling highlight along the top edge of sticky app bars. */
+  .nova-rail {
+    @apply relative overflow-hidden;
+  }
+
+  .nova-rail::after {
+    content: "";
+    @apply absolute inset-x-0 top-0 h-px;
+    background: linear-gradient(
+      90deg,
+      transparent,
+      rgba(255, 30, 60, 0.85),
+      transparent
+    );
+    width: 40%;
+    animation: sweep 4s ease-in-out infinite;
+  }
+
+  /* Wide admin tables scroll inside their card rather than the page. */
+  .nova-table-wrap {
+    @apply -mx-4 overflow-x-auto px-4;
+  }
+
+  .nova-table {
+    @apply w-full min-w-[640px] border-collapse text-sm;
+  }
+
+  .nova-table th {
+    @apply whitespace-nowrap border-b border-nova-border px-3 py-2.5 text-left
+           font-display text-[10px] font-bold uppercase tracking-widest text-nova-muted;
+  }
+
+  .nova-table td {
+    @apply border-b border-nova-border/50 px-3 py-3 align-middle;
+  }
+
+  .nova-table tbody tr {
+    @apply transition-colors;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+@media print {
+  .no-print,
+  .nova-backdrop {
+    display: none !important;
+  }
+
+  body {
+    @apply bg-white text-black;
+  }
+}
