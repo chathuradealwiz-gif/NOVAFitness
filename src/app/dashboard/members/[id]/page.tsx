@@ -1,8 +1,10 @@
 import Link from "next/link";
+import { IconBack } from "@/components/icons";
 import { notFound } from "next/navigation";
 import { requireStaff } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
 import { DetailRow, PageHeader, StatusPill } from "@/components/ui";
+import { Avatar } from "@/components/Avatar";
 import { formatDate, formatDateTime, formatMoney, PAYMENT_TYPE_LABELS } from "@/lib/format";
 import type {
   Attendance,
@@ -82,6 +84,7 @@ export default async function MemberDetailPage({ params }: { params: { id: strin
         subtitle={`Member since ${formatDate(typedMember.join_date)}`}
         action={
           <Link href="/dashboard/members" className="nova-btn-ghost">
+            <IconBack size={16} />
             Back to members
           </Link>
         }
@@ -92,18 +95,11 @@ export default async function MemberDetailPage({ params }: { params: { id: strin
         <div className="space-y-4">
           <section className="nova-card">
             <div className="flex items-center gap-4">
-              {typedMember.profile_image_url ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img
-                  src={typedMember.profile_image_url}
-                  alt=""
-                  className="h-16 w-16 rounded-xl object-cover"
-                />
-              ) : (
-                <span className="grid h-16 w-16 place-items-center rounded-xl bg-nova-surface text-xl font-bold text-nova-muted">
-                  {typedMember.full_name.charAt(0).toUpperCase()}
-                </span>
-              )}
+              <Avatar
+                name={typedMember.full_name}
+                src={typedMember.profile_image_url}
+                size={64}
+              />
               <div className="min-w-0">
                 {/* A bare number needs the "No." to read as an identifier. */}
                 <p className="font-display text-lg font-bold text-nova-red">
@@ -119,7 +115,6 @@ export default async function MemberDetailPage({ params }: { params: { id: strin
               <DetailRow label="Phone" value={typedMember.phone ?? "—"} />
               <DetailRow label="Email" value={typedMember.email ?? "—"} />
               <DetailRow label="Date of Birth" value={formatDate(typedMember.date_of_birth)} />
-              <DetailRow label="Emergency Contact" value={typedMember.emergency_contact ?? "—"} />
               <DetailRow label="Address" value={typedMember.address ?? "—"} />
             </div>
           </section>

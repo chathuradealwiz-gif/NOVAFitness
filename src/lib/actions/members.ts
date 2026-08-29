@@ -31,7 +31,6 @@ const memberSchema = z.object({
   date_of_birth: z.string().optional().or(z.literal("")),
   gender: z.string().optional().or(z.literal("")),
   address: z.string().optional().or(z.literal("")),
-  emergency_contact: z.string().optional().or(z.literal("")),
 });
 
 function clean<T extends Record<string, unknown>>(input: T): T {

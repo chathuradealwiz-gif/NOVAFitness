@@ -1,6 +1,7 @@
 "use client";
 
 import { toCsv } from "@/lib/format";
+import { IconDownload } from "@/components/icons";
 
 interface Row {
   occurred_at: string;
@@ -38,6 +39,7 @@ export function ExportButton({ rows }: { rows: Row[] }) {
 
   return (
     <button className="nova-btn-ghost no-print" onClick={download} disabled={rows.length === 0}>
+      <IconDownload size={16} />
       Export CSV
     </button>
   );

@@ -1,6 +1,7 @@
 import { requireMember } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
 import { EmptyState } from "@/components/ui";
+import { MealArt } from "@/components/illustrations";
 import type { MealPlan, MealPlanItem } from "@/types/database";
 
 const DAYS = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"];
@@ -27,7 +28,7 @@ export default async function MemberMealPlanPage() {
     return (
       <div className="space-y-4">
         <h1 className="text-2xl font-bold tracking-tight">Meal Plan</h1>
-        <EmptyState title="No meal plan assigned yet" hint="Ask the gym staff to set one up." />
+        <EmptyState title="No meal plan assigned yet" art={<MealArt />} hint="Ask the gym staff to set one up." />
       </div>
     );
   }

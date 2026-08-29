@@ -2,6 +2,14 @@ import Link from "next/link";
 import { requireStaff } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
 import { PageHeader, StatCard, StatusPill } from "@/components/ui";
+import {
+  IconAttendance,
+  IconDevice,
+  IconFinance,
+  IconMembers,
+  IconPayments,
+  IconStatus,
+} from "@/components/icons";
 import { formatDate, formatMoney } from "@/lib/format";
 import type { DashboardStats, GymSettings, Member } from "@/types/database";
 import { AttendanceTrend } from "./AttendanceTrend";
@@ -36,19 +44,29 @@ export default async function DashboardPage() {
       />
 
       <section className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-4">
-        <StatCard label="Total Members" value={s.total_members ?? 0} />
-        <StatCard label="Active" value={s.active_members ?? 0} accent />
-        <StatCard label="Expired" value={s.expired_members ?? 0} />
-        <StatCard label="Suspended" value={s.suspended_members ?? 0} />
+        <StatCard label="Total Members" value={s.total_members ?? 0} icon={<IconMembers size={17} />} />
+        <StatCard label="Active" value={s.active_members ?? 0} accent icon={<IconMembers size={17} />} />
+        <StatCard label="Expired" value={s.expired_members ?? 0} icon={<IconStatus size={17} />} />
+        <StatCard label="Suspended" value={s.suspended_members ?? 0} icon={<IconStatus size={17} />} />
         <StatCard
           label="Today's Attendance"
           value={s.today_attendance ?? 0}
           hint={`${s.today_entries ?? 0} in · ${s.today_exits ?? 0} out`}
+          icon={<IconAttendance size={17} />}
         />
-        <StatCard label="Today's Revenue" value={formatMoney(s.today_revenue, currency)} />
-        <StatCard label="This Month" value={formatMoney(s.month_revenue, currency)} />
+        <StatCard
+          label="Today's Revenue"
+          value={formatMoney(s.today_revenue, currency)}
+          icon={<IconPayments size={17} />}
+        />
+        <StatCard
+          label="This Month"
+          value={formatMoney(s.month_revenue, currency)}
+          icon={<IconFinance size={17} />}
+        />
         <StatCard
           label="Devices"
+          icon={<IconDevice size={17} />}
           value={`${s.devices_online ?? 0} online`}
           hint={
             (s.pending_sync ?? 0) > 0

@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { saveProfileImage } from "@/lib/actions/member-profile";
+import { Avatar } from "@/components/Avatar";
 
 const MAX_BYTES = 2 * 1024 * 1024;
 const MAX_DIMENSION = 512;
@@ -88,14 +89,16 @@ export function AvatarUpload({
         className="block"
         aria-label="Change profile picture"
       >
-        {src ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img src={src} alt="" className="h-20 w-20 rounded-2xl object-cover" />
-        ) : (
-          <span className="grid h-20 w-20 place-items-center rounded-2xl bg-nova-surface text-2xl font-bold text-nova-muted">
-            {name.charAt(0).toUpperCase()}
+        <span className="relative block">
+          <Avatar name={name} src={src} size={80} />
+          {/* Camera affordance, so it reads as tappable. */}
+          <span className="absolute -bottom-1 -right-1 grid h-7 w-7 place-items-center rounded-full border-2 border-nova-card bg-nova-red text-white">
+            <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2.5" aria-hidden>
+              <path d="M4 8h3l2-2h6l2 2h3v11H4z" strokeLinejoin="round" />
+              <circle cx="12" cy="13" r="3.2" />
+            </svg>
           </span>
-        )}
+        </span>
       </button>
 
       <input

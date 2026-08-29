@@ -1,6 +1,7 @@
 import { requireStaff } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
 import { EmptyState, PageHeader } from "@/components/ui";
+import { FingerprintArt } from "@/components/illustrations";
 import { formatDateTime } from "@/lib/format";
 import type { Device } from "@/types/database";
 
@@ -24,7 +25,7 @@ export default async function DevicesPage() {
 
       {devices.length === 0 ? (
         <EmptyState
-          title="No devices registered"
+          title="No devices registered" art={<FingerprintArt />}
           hint="Run scripts/provision-device.mjs to register a terminal and mint its key."
         />
       ) : (

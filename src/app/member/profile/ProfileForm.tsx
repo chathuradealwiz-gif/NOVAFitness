@@ -48,14 +48,6 @@ export function ProfileForm({ member }: { member: Member }) {
         />
       </Field>
 
-      <Field label="Emergency Contact">
-        <input
-          name="emergency_contact"
-          className="nova-input"
-          defaultValue={member.emergency_contact ?? ""}
-        />
-      </Field>
-
       <Field label="Address">
         <textarea
           name="address"

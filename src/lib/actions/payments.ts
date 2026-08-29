@@ -5,6 +5,7 @@ import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import { requireStaff, requireSuperAdmin } from "@/lib/auth/session";
 import type { ActionResult } from "./members";
+import type { Member, MemberStatus, Payment } from "@/types/database";
 
 const paymentSchema = z.object({
   member_id: z.string().uuid(),
@@ -50,6 +51,7 @@ export async function recordPayment(formData: FormData): Promise<ActionResult> {
 
   revalidatePath(`/dashboard/members/${input.member_id}`);
   revalidatePath("/dashboard/payments");
+  revalidatePath("/dashboard/pay");
   revalidatePath("/dashboard");
   return { ok: true };
 }
@@ -87,4 +89,102 @@ export async function voidPayment(
   revalidatePath(`/dashboard/members/${result.member_id}`);
   revalidatePath("/dashboard/payments");
   return { ok: true };
+}
+
+/* ------------------------------------------------------------------ quick pay */
+/*
+ * Backing actions for /dashboard/pay. Both go through requireStaff(), so the
+ * permission check does not depend on the navigation item being hidden, and both
+ * reuse the existing search RPC / tables rather than introducing a second source
+ * of truth for members or payments.
+ */
+
+export interface PaySearchResult {
+  id: string;
+  membership_id: string;
+  full_name: string;
+  phone: string | null;
+  status: MemberStatus;
+}
+
+/** Server-side member lookup for the Pay page's search box (spec §11). */
+export async function searchMembersForPay(query: string): Promise<PaySearchResult[]> {
+  await requireStaff();
+
+  const trimmed = query.trim();
+  // Nothing useful to match on yet — never fall back to "load every member".
+  if (trimmed.length < 2) return [];
+
+  const supabase = createClient();
+  const { data, error } = await supabase.rpc("search_members", {
+    p_query: trimmed,
+    p_limit: 10,
+  });
+
+  if (error) return [];
+
+  return ((data ?? []) as Member[]).map((member) => ({
+    id: member.id,
+    membership_id: member.membership_id,
+    full_name: member.full_name,
+    phone: member.phone,
+    status: member.status,
+  }));
+}
+
+export interface PayContext {
+  member: Member;
+  payments: Payment[];
+  workoutPlans: PlanSummary[];
+  mealPlans: PlanSummary[];
+}
+
+export interface PlanSummary {
+  id: string;
+  title: string;
+}
+
+/**
+ * Everything the Pay page shows for one member: summary, recent payments and
+ * assigned plans. Mirrors the queries on the member detail page so both screens
+ * show the same numbers.
+ */
+export async function getPayContext(memberId: string): Promise<PayContext | null> {
+  await requireStaff();
+
+  const supabase = createClient();
+
+  const { data: member } = await supabase
+    .from("members")
+    .select("*")
+    .eq("id", memberId)
+    .maybeSingle();
+
+  if (!member) return null;
+
+  const [{ data: payments }, { data: workoutPlans }, { data: mealPlans }] = await Promise.all([
+    supabase
+      .from("payments")
+      .select("*")
+      .eq("member_id", memberId)
+      .order("payment_date", { ascending: false })
+      .limit(8),
+    supabase
+      .from("workout_plans")
+      .select("id, title")
+      .eq("member_id", memberId)
+      .eq("status", "active"),
+    supabase
+      .from("meal_plans")
+      .select("id, title")
+      .eq("member_id", memberId)
+      .eq("status", "active"),
+  ]);
+
+  return {
+    member: member as Member,
+    payments: (payments ?? []) as Payment[],
+    workoutPlans: (workoutPlans ?? []) as PlanSummary[],
+    mealPlans: (mealPlans ?? []) as PlanSummary[],
+  };
 }

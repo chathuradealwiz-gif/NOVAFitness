@@ -1,5 +1,10 @@
 // POST /functions/v1/super-admin-login
 //
+// Username + password sign-in. Named for its original purpose, but it now serves
+// any account that has been given a `profiles.username` — the super admin, and any
+// test/demo account you deliberately enable. Accounts without a username (the
+// default for everyone) cannot use this route at all and must use a magic link.
+//
 // The spec (§"Super Admin bootstrap") requires the super admin to sign in with a
 // username instead of an email, without inventing a plaintext password table.
 //
@@ -54,9 +59,14 @@ Deno.serve(async (req) => {
     .eq("username", username)
     .maybeSingle();
 
-  // Same response shape and status for "no such user" and "wrong password", so
-  // the endpoint cannot be used to enumerate accounts.
-  if (!profile || profile.role !== "super_admin" || !profile.is_active) {
+  // Any role may sign in here, but ONLY if the account has been given a username.
+  // `profiles.username` is null for everyone by default and is never set through
+  // the app UI, so password login stays opt-in per account rather than being
+  // silently available to every member (spec: ordinary accounts use magic links).
+  //
+  // Same response shape and status for "no such username" and "wrong password",
+  // so the endpoint cannot be used to enumerate accounts.
+  if (!profile || !profile.is_active) {
     return json({ error: "invalid_credentials" }, 401);
   }
 
@@ -83,6 +93,8 @@ Deno.serve(async (req) => {
       refresh_token: data.session.refresh_token,
       expires_in: data.session.expires_in,
     },
+    // The client routes on this: staff land on /dashboard, members on /member.
+    role: profile.role,
     must_change_password: profile.must_change_password,
   });
 });

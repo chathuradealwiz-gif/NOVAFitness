@@ -2,6 +2,7 @@ import Link from "next/link";
 import { requireStaff } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
 import { EmptyState, PageHeader } from "@/components/ui";
+import { ReceiptArt } from "@/components/illustrations";
 import { formatDate, formatMoney, PAYMENT_TYPE_LABELS } from "@/lib/format";
 import type { Member, Payment, PaymentStatus, PaymentType } from "@/types/database";
 import { PaymentFilters } from "./PaymentFilters";
@@ -71,7 +72,7 @@ export default async function PaymentsPage({
 
       {rows.length === 0 ? (
         <EmptyState
-          title="No payments in this range"
+          title="No payments in this range" art={<ReceiptArt />}
           hint="Record payments from a member's profile page."
         />
       ) : (

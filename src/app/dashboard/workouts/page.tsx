@@ -2,6 +2,7 @@ import Link from "next/link";
 import { requireStaff } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
 import { EmptyState, PageHeader } from "@/components/ui";
+import { DumbbellArt } from "@/components/illustrations";
 import { formatDate } from "@/lib/format";
 
 interface PlanRow {
@@ -36,7 +37,7 @@ export default async function WorkoutPlansPage() {
 
       {plans.length === 0 ? (
         <EmptyState
-          title="No workout plans yet"
+          title="No workout plans yet" art={<DumbbellArt />}
           hint="Open a member and choose Assign Workout."
         />
       ) : (

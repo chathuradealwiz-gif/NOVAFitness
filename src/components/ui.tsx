@@ -11,15 +11,22 @@ export function StatCard({
   value,
   hint,
   accent = false,
+  icon,
 }: {
   label: string;
   value: ReactNode;
   hint?: string;
   accent?: boolean;
+  icon?: ReactNode;
 }) {
   return (
     <div className={`nova-card ${accent ? "nova-card-accent" : ""}`}>
-      <p className="nova-label">{label}</p>
+      <div className="flex items-start justify-between gap-2">
+        <p className="nova-label">{label}</p>
+        {icon && (
+          <span className={accent ? "text-nova-red" : "text-nova-muted/60"}>{icon}</span>
+        )}
+      </div>
       <p
         className={`mt-2 font-display text-2xl font-bold tabular-nums ${
           accent ? "text-nova-red" : ""
@@ -32,11 +39,23 @@ export function StatCard({
   );
 }
 
-export function EmptyState({ title, hint }: { title: string; hint?: string }) {
+export function EmptyState({
+  title,
+  hint,
+  art,
+}: {
+  title: string;
+  hint?: string;
+  /** Optional illustration from components/illustrations. */
+  art?: ReactNode;
+}) {
   return (
-    <div className="nova-card grid place-items-center py-12 text-center">
-      <p className="font-semibold text-nova-text">{title}</p>
-      {hint && <p className="mt-1 text-sm text-nova-muted">{hint}</p>}
+    <div className="nova-card mt-4 grid place-items-center px-4 py-14 text-center">
+      {art && <div className="mb-4 text-nova-muted">{art}</div>}
+      <p className="font-display text-sm font-bold uppercase tracking-wider text-nova-text">
+        {title}
+      </p>
+      {hint && <p className="mt-2 max-w-xs text-sm text-nova-muted">{hint}</p>}
     </div>
   );
 }

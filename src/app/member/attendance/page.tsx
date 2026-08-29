@@ -1,6 +1,7 @@
 import { requireMember } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
 import { EmptyState } from "@/components/ui";
+import { AttendanceArt } from "@/components/illustrations";
 import { formatDateTime } from "@/lib/format";
 import type { Attendance } from "@/types/database";
 
@@ -36,7 +37,7 @@ export default async function MemberAttendancePage() {
       </section>
 
       {events.length === 0 ? (
-        <EmptyState title="No visits recorded yet" hint="Scan your finger at the entrance." />
+        <EmptyState title="No visits recorded yet" art={<AttendanceArt />} hint="Scan your finger at the entrance." />
       ) : (
         <section className="nova-card">
           <p className="nova-label mb-2">Recent activity</p>

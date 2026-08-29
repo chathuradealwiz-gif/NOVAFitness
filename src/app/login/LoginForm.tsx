@@ -9,10 +9,12 @@ import { Spinner } from "@/components/Loading";
 /**
  * Two ways in (spec "Login UI"):
  *   - everyone: Supabase magic link
- *   - super admin: username + password, verified server-side by the
+ *   - accounts with a username: username + password, verified server-side by the
  *     super-admin-login Edge Function
  *
- * The super-admin form is behind a toggle and no credentials are ever shown here.
+ * The username form is behind a toggle and no credentials are ever shown here.
+ * After sign-in the caller is routed by their actual role, so a member account
+ * with a username lands on /member and staff land on /dashboard.
  */
 export function LoginForm() {
   const router = useRouter();
@@ -23,7 +25,12 @@ export function LoginForm() {
       {mode === "magic" ? (
         <MagicLinkForm onSuperAdmin={() => setMode("super")} />
       ) : (
-        <SuperAdminForm onBack={() => setMode("magic")} onSuccess={() => router.replace("/dashboard")} />
+        <SuperAdminForm
+          onBack={() => setMode("magic")}
+          onSuccess={(role) =>
+            router.replace(role === "user" ? "/member" : "/dashboard")
+          }
+        />
       )}
     </div>
   );
@@ -97,14 +104,20 @@ function MagicLinkForm({ onSuperAdmin }: { onSuperAdmin: () => void }) {
           onClick={onSuperAdmin}
           className="text-xs text-nova-muted underline underline-offset-4 hover:text-nova-text"
         >
-          Super Admin sign in
+          Sign in with username
         </button>
       </div>
     </form>
   );
 }
 
-function SuperAdminForm({ onBack, onSuccess }: { onBack: () => void; onSuccess: () => void }) {
+function SuperAdminForm({
+  onBack,
+  onSuccess,
+}: {
+  onBack: () => void;
+  onSuccess: (role: string) => void;
+}) {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
@@ -123,6 +136,10 @@ function SuperAdminForm({ onBack, onSuccess }: { onBack: () => void; onSuccess: 
           headers: {
             "Content-Type": "application/json",
             apikey: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+            // The Functions gateway rejects unauthenticated requests with
+            // UNAUTHORIZED_NO_AUTH_HEADER unless a bearer token is present, even
+            // for a public endpoint like this one. The anon key is the token.
+            Authorization: `Bearer ${process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY}`,
           },
           body: JSON.stringify({ username, password }),
         },
@@ -152,7 +169,7 @@ function SuperAdminForm({ onBack, onSuccess }: { onBack: () => void; onSuccess: 
         return;
       }
 
-      onSuccess();
+      onSuccess(body.role ?? "super_admin");
     } catch {
       setError("Could not reach the server. Check your connection.");
     } finally {
@@ -162,7 +179,7 @@ function SuperAdminForm({ onBack, onSuccess }: { onBack: () => void; onSuccess: 
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
-      <p className="nova-label">Super Admin</p>
+      <p className="nova-label">Username sign in</p>
 
       <Field label="Username">
         <input
@@ -188,7 +205,7 @@ function SuperAdminForm({ onBack, onSuccess }: { onBack: () => void; onSuccess: 
       {error && <p className="text-sm text-nova-red">{error}</p>}
 
       <button type="submit" className="nova-btn-primary w-full" disabled={busy}>
-        {busy ? (<><Spinner size={16} /> Signing in…</>) : "Super Admin Login"}
+        {busy ? (<><Spinner size={16} /> Signing in…</>) : "Sign In"}
       </button>
 
       <div className="pt-2 text-center">

@@ -1,0 +1,8 @@
+ESP32 S3 DevKitC-1 N16R8 WiFi BLE Dev Board × 1	
+R503 RGB Ring Capacitive Fingerprint Module × 1	
+SIMA7670C FS-MCore 4G LTE Module × 1	
+12V Solenoid Door Lock × 1	
+1 channel 5V DC Relay Module with Optocoupler × 1	
+KY-025 Reed Switch Module × 1	
+ 2.4 inch 240x320 SPI TFT LCD Module Display ILI9341 PCB Adapter SD Card (MD0671)	
+HW-688 12V/24V to 5V 6A Buck Module × 1	

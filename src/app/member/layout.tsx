@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { requireMember } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
 import { Logo } from "@/components/Logo";
+import { IconLogout, IconWhatsApp } from "@/components/icons";
 import { MemberNav } from "./MemberNav";
 
 export default async function MemberLayout({ children }: { children: React.ReactNode }) {
@@ -28,13 +29,16 @@ export default async function MemberLayout({ children }: { children: React.React
               href={settings.whatsapp_url}
               target="_blank"
               rel="noopener noreferrer"
-              className="rounded-lg bg-emerald-600/20 px-3 py-2 text-xs font-semibold text-emerald-400"
+              className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600/20 px-3 py-2 font-display text-[10px] font-bold uppercase tracking-wide text-emerald-400"
             >
+              <IconWhatsApp size={14} />
               WhatsApp Us
             </a>
           )}
           <form action="/auth/signout" method="post">
-            <button className="text-xs text-nova-muted">Sign out</button>
+            <button className="flex items-center gap-1 text-xs text-nova-muted" aria-label="Sign out">
+              <IconLogout size={16} />
+            </button>
           </form>
         </div>
       </header>

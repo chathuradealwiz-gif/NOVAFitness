@@ -1,6 +1,7 @@
 import { requireMember } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
 import { EmptyState } from "@/components/ui";
+import { DumbbellArt } from "@/components/illustrations";
 import { formatDate } from "@/lib/format";
 import type { WorkoutExercise, WorkoutPlan } from "@/types/database";
 
@@ -28,7 +29,7 @@ export default async function MemberWorkoutPage() {
       <div className="space-y-4">
         <h1 className="text-2xl font-bold tracking-tight">Workout Plan</h1>
         <EmptyState
-          title="No plan assigned yet"
+          title="No plan assigned yet" art={<DumbbellArt />}
           hint="Ask a trainer at the gym to set one up for you."
         />
       </div>

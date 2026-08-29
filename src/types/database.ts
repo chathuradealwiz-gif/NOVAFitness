@@ -286,7 +286,6 @@ export interface Database {
         {
           p_full_name: string;
           p_phone: string;
-          p_emergency_contact?: string | null;
           p_address?: string | null;
           p_profile_image_url?: string | null;
         },

@@ -1,0 +1,1388 @@
+<title>NOVA FITNESS Door Controller</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+
+<style>
+  :root{
+    --ground:#EDF1F4; --surface:#FFFFFF; --surface-2:#F5F8FA; --surface-3:#E9EEF2;
+    --ink:#131A21; --ink-2:#48555F; --ink-3:#71818D;
+    --rule:#D3DBE2; --rule-2:#C0CBD4;
+    --accent:#AC4715; --accent-soft:#FAEDE6; --accent-line:#E3C4B1;
+    --r12:#A32B22; --r5:#C1670E; --r33:#9C7B0B; --gnd:#3A444D;
+    --data:#0C6B60; --in:#2F52A0; --out:#733B96;
+    --ok:#1C6B45; --warn:#8A5A00; --crit:#A32B22;
+    --shadow:0 1px 2px rgba(19,26,33,.05), 0 6px 20px -12px rgba(19,26,33,.22);
+  }
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]){
+      --ground:#0F151A; --surface:#171F26; --surface-2:#1C262E; --surface-3:#232F38;
+      --ink:#E6EDF3; --ink-2:#A9B7C2; --ink-3:#7C8B97;
+      --rule:#2A343E; --rule-2:#38454F;
+      --accent:#E8823F; --accent-soft:#2A1C13; --accent-line:#4A3223;
+      --r12:#F07268; --r5:#F0A44B; --r33:#DFC152; --gnd:#93A2AE;
+      --data:#3FCBB9; --in:#83A8F2; --out:#C48BE8;
+      --ok:#4FCB8C; --warn:#E0B44A; --crit:#F07268;
+      --shadow:0 1px 2px rgba(0,0,0,.4), 0 6px 22px -12px rgba(0,0,0,.7);
+    }
+  }
+  :root[data-theme="dark"]{
+    --ground:#0F151A; --surface:#171F26; --surface-2:#1C262E; --surface-3:#232F38;
+    --ink:#E6EDF3; --ink-2:#A9B7C2; --ink-3:#7C8B97;
+    --rule:#2A343E; --rule-2:#38454F;
+    --accent:#E8823F; --accent-soft:#2A1C13; --accent-line:#4A3223;
+    --r12:#F07268; --r5:#F0A44B; --r33:#DFC152; --gnd:#93A2AE;
+    --data:#3FCBB9; --in:#83A8F2; --out:#C48BE8;
+    --ok:#4FCB8C; --warn:#E0B44A; --crit:#F07268;
+    --shadow:0 1px 2px rgba(0,0,0,.4), 0 6px 22px -12px rgba(0,0,0,.7);
+  }
+
+  *{box-sizing:border-box}
+  body{
+    margin:0; background:var(--ground); color:var(--ink);
+    font-family:"IBM Plex Sans",-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+    font-size:15.5px; line-height:1.62; -webkit-font-smoothing:antialiased;
+  }
+  .wrap{max-width:1140px; margin:0 auto; padding:0 24px 96px}
+
+  /* ---------- header ---------- */
+  header.top{
+    border-bottom:1px solid var(--rule);
+    background:var(--surface);
+    padding:52px 0 0;
+  }
+  header.top .wrap{padding-bottom:0}
+  .eyebrow{
+    font-family:"IBM Plex Mono",ui-monospace,monospace; font-size:11.5px; font-weight:500;
+    letter-spacing:.14em; text-transform:uppercase; color:var(--accent); margin:0 0 14px;
+  }
+  h1{
+    font-family:Archivo,"IBM Plex Sans",sans-serif; font-weight:700;
+    font-size:clamp(2.15rem,5vw,3.15rem); line-height:1.03; letter-spacing:-.025em;
+    margin:0 0 16px; text-wrap:balance; max-width:16ch;
+  }
+  .lede{font-size:1.06rem; color:var(--ink-2); max-width:64ch; margin:0 0 30px}
+  .specstrip{
+    display:flex; flex-wrap:wrap; gap:0; border-top:1px solid var(--rule);
+    margin:0 -24px; padding:0 24px;
+  }
+  .spec{
+    flex:1 1 190px; padding:16px 22px 20px; border-right:1px solid var(--rule);
+  }
+  .spec:last-child{border-right:0}
+  .spec dt{
+    font-family:"IBM Plex Mono",monospace; font-size:10.5px; font-weight:500;
+    letter-spacing:.11em; text-transform:uppercase; color:var(--ink-3); margin:0 0 5px;
+  }
+  .spec dd{margin:0; font-weight:600; font-size:.97rem; letter-spacing:-.005em}
+  .spec dd span{display:block; font-weight:400; font-size:.83rem; color:var(--ink-3); letter-spacing:0}
+
+  /* ---------- sections ---------- */
+  section{margin-top:60px}
+  .sec-head{display:flex; align-items:baseline; gap:14px; margin-bottom:6px; flex-wrap:wrap}
+  .sec-num{
+    font-family:"IBM Plex Mono",monospace; font-size:11.5px; font-weight:600;
+    color:var(--accent); letter-spacing:.1em; padding-top:4px;
+  }
+  h2{
+    font-family:Archivo,sans-serif; font-weight:600; font-size:1.72rem; letter-spacing:-.02em;
+    margin:0; text-wrap:balance;
+  }
+  h3{
+    font-family:Archivo,sans-serif; font-weight:600; font-size:1.06rem; letter-spacing:-.01em;
+    margin:0 0 3px;
+  }
+  .sec-sub{color:var(--ink-2); margin:0 0 26px; max-width:70ch}
+  p{margin:0 0 15px}
+  a{color:var(--accent)}
+
+  /* ---------- figures ---------- */
+  figure{
+    margin:0 0 20px; background:var(--surface); border:1px solid var(--rule);
+    border-radius:10px; box-shadow:var(--shadow); overflow:hidden;
+  }
+  .figbody{padding:22px 20px 10px; overflow-x:auto}
+  figure svg{display:block; width:100%; min-width:640px; height:auto}
+  figcaption{
+    padding:13px 20px 15px; border-top:1px solid var(--rule); background:var(--surface-2);
+    font-size:.855rem; color:var(--ink-2);
+  }
+  figcaption b{color:var(--ink); font-weight:600}
+
+  .legend{
+    display:flex; flex-wrap:wrap; gap:6px 20px; padding:0 20px 18px;
+    font-family:"IBM Plex Mono",monospace; font-size:11px; color:var(--ink-2);
+  }
+  .legend span{display:inline-flex; align-items:center; gap:7px; white-space:nowrap}
+  .swatch{width:20px; height:0; border-top-width:2.5px; border-top-style:solid; display:inline-block}
+
+  /* ---------- schematic sheet ---------- */
+  .sheet svg{min-width:1180px}
+  .sch{color:var(--ink); font-family:"IBM Plex Mono",ui-monospace,monospace}
+  .sch .w{stroke:currentColor; stroke-width:2; fill:none; stroke-linecap:round}
+  .sch .sym{stroke:currentColor; stroke-width:2; fill:none; stroke-linecap:round; stroke-linejoin:round}
+  .sch text{fill:currentColor; stroke:none}
+  .sch .dot{fill:currentColor; stroke:none}
+  .sch .fillc{fill:currentColor; stroke:none}
+  .sch .box{fill:var(--surface-2); stroke:currentColor; stroke-width:2}
+  .sch .frame{fill:none; stroke:var(--rule-2); stroke-width:1.5}
+  .sch .band{stroke:var(--rule); stroke-width:1; fill:none}
+  .sch .c12{color:var(--r12)} .sch .c5{color:var(--r5)}
+  .sch .c33{color:var(--r33)} .sch .cg{color:var(--gnd)}
+  .sch .ccrit{color:var(--crit)} .sch .cmute{color:var(--ink-3)}
+  .sch .hdr{font-size:15px; font-weight:600; letter-spacing:.14em; fill:var(--accent)}
+  .sch .ref{font-size:13px; font-weight:600}
+  .sch .val{font-size:12.5px; fill:var(--ink-2)}
+  .sch .pin{font-size:13px; fill:var(--ink-2)}
+  .sch .net{font-size:13.5px; font-weight:500}
+  .sch .name{font-size:18px; font-weight:600}
+  .sch .sub{font-size:12.5px; fill:var(--ink-3)}
+  .sch .tiny{font-size:11.5px; fill:var(--ink-3)}
+
+  /* ---------- tables ---------- */
+  .tablewrap{overflow-x:auto; border:1px solid var(--rule); border-radius:10px; background:var(--surface); box-shadow:var(--shadow)}
+  table{border-collapse:collapse; width:100%; min-width:560px; font-size:.87rem}
+  th,td{padding:9px 15px; text-align:left; border-bottom:1px solid var(--rule); vertical-align:top}
+  thead th{
+    font-family:"IBM Plex Mono",monospace; font-size:10.5px; font-weight:600;
+    letter-spacing:.09em; text-transform:uppercase; color:var(--ink-3);
+    background:var(--surface-2); border-bottom:1px solid var(--rule-2); white-space:nowrap;
+  }
+  tbody tr:last-child td{border-bottom:0}
+  code,.mono{font-family:"IBM Plex Mono",ui-monospace,monospace; font-size:.885em}
+  td code{
+    background:var(--surface-3); padding:1.5px 6px; border-radius:4px;
+    font-weight:500; white-space:nowrap;
+  }
+  .num{font-variant-numeric:tabular-nums; text-align:right}
+  .muted{color:var(--ink-3)}
+
+  /* ---------- module cards ---------- */
+  .cards{display:grid; gap:18px; grid-template-columns:repeat(auto-fit,minmax(340px,1fr))}
+  .card{
+    background:var(--surface); border:1px solid var(--rule); border-radius:10px;
+    box-shadow:var(--shadow); overflow:hidden; display:flex; flex-direction:column;
+  }
+  .card-head{padding:16px 18px 13px; border-bottom:1px solid var(--rule)}
+  .card-head .kicker{
+    font-family:"IBM Plex Mono",monospace; font-size:10.5px; letter-spacing:.1em;
+    text-transform:uppercase; color:var(--ink-3);
+  }
+  .card table{min-width:0; font-size:.845rem}
+  .card th,.card td{padding:7px 18px}
+  .card-note{
+    padding:11px 18px 14px; font-size:.82rem; color:var(--ink-2);
+    border-top:1px solid var(--rule); background:var(--surface-2);
+  }
+  .rail{
+    display:inline-block; font-family:"IBM Plex Mono",monospace; font-size:10px;
+    font-weight:600; letter-spacing:.05em; padding:1.5px 7px; border-radius:20px;
+    border:1px solid currentColor;
+  }
+  .rail-12{color:var(--r12)} .rail-5{color:var(--r5)} .rail-33{color:var(--r33)} .rail-g{color:var(--gnd)}
+
+  /* ---------- callouts ---------- */
+  .notes{display:grid; gap:12px}
+  .note{
+    background:var(--surface); border:1px solid var(--rule); border-left:3px solid var(--rule-2);
+    border-radius:8px; padding:14px 18px;
+  }
+  .note.crit{border-left-color:var(--crit)}
+  .note.warn{border-left-color:var(--warn)}
+  .note.ok{border-left-color:var(--ok)}
+  .note h4{
+    font-family:Archivo,sans-serif; font-size:.95rem; font-weight:600; margin:0 0 4px;
+    letter-spacing:-.005em;
+  }
+  .note p{margin:0; font-size:.885rem; color:var(--ink-2)}
+  .note .tag{
+    font-family:"IBM Plex Mono",monospace; font-size:9.5px; letter-spacing:.11em;
+    text-transform:uppercase; font-weight:600; margin-right:9px;
+  }
+  .note.crit .tag{color:var(--crit)} .note.warn .tag{color:var(--warn)} .note.ok .tag{color:var(--ok)}
+
+  .callout{
+    background:var(--accent-soft); border:1px solid var(--accent-line); border-radius:10px;
+    padding:18px 20px; margin:0 0 24px;
+  }
+  .callout p{margin:0; font-size:.9rem; color:var(--ink-2)}
+  .callout strong{color:var(--ink)}
+
+  footer{margin-top:64px; padding-top:22px; border-top:1px solid var(--rule); color:var(--ink-3); font-size:.83rem}
+  footer a{color:var(--ink-2)}
+
+  @media (max-width:640px){
+    .spec{flex-basis:100%; border-right:0; border-bottom:1px solid var(--rule)}
+    .wrap{padding:0 18px 72px}
+    header.top{padding-top:36px}
+  }
+</style>
+
+<header class="top">
+  <div class="wrap">
+    <p class="eyebrow">NOVA FITNESS · Access Controller · Rev A</p>
+    <h1>Door Controller Wiring</h1>
+    <p class="lede">Full interconnect for the ESP32‑S3 fingerprint entry unit: signal wiring, power distribution, the lock drive stage, and the pin map your firmware should compile against.</p>
+    <dl class="specstrip">
+      <div class="spec"><dt>Supply</dt><dd>12 V DC · 5 A<span>single adapter, fused 3 A</span></dd></div>
+      <div class="spec"><dt>Controller</dt><dd>ESP32‑S3 N16R8<span>3.3 V logic, 16 MB / 8 MB PSRAM</span></dd></div>
+      <div class="spec"><dt>Uplink</dt><dd>4G LTE + Wi‑Fi<span>A7670C primary, Wi‑Fi fallback</span></dd></div>
+      <div class="spec"><dt>Lock</dt><dd>12 V solenoid<span>relay‑switched, fail‑secure</span></dd></div>
+    </dl>
+  </div>
+</header>
+
+<div class="wrap">
+
+<!-- ============ 1. FULL SCHEMATIC ============ -->
+<section>
+  <div class="sec-head"><span class="sec-num">01</span><h2>Complete schematic</h2></div>
+  <p class="sec-sub">The whole circuit on one sheet, with every passive drawn and given a reference designator. Signals that cross between blocks use net labels rather than long wires — a net name appearing in two places means those two points are the same wire. The bill of materials in section 08 uses the same designators.</p>
+
+  <figure class="sheet">
+    <div class="figbody">
+      <svg viewBox="0 0 1500 2660" role="img" aria-label="Full schematic of the NOVA FITNESS door controller, drawn in six blocks: power supply with fuse and bulk capacitors feeding the HW-688 buck converter; the ESP32-S3 with its decoupling capacitor and net-labelled GPIO pins; the R503 fingerprint connector and ILI9341 display; the A7670C modem with bulk capacitors and a 2N3904 PWRKEY driver; the relay with a 10k pull-up driving a solenoid with a 1N4007 flyback diode; and the reed switch, exit button and buzzer transistor stage.">
+
+        <g class="sch">
+        <defs>
+          <g id="res" class="sym"><path d="M0,-22 V-14 l-7,3.5 l14,7 l-14,7 l14,7 l-7,3.5 V22"/></g>
+          <g id="cap" class="sym"><path d="M0,-22 V-4"/><path d="M-11,-4 H11"/><path d="M-11,4 H11"/><path d="M0,4 V22"/></g>
+          <g id="capp" class="sym"><path d="M0,-22 V-5"/><path d="M-12,-5 H12"/><path d="M-12,9 Q0,0 12,9"/><path d="M0,9 V22"/><path d="M-19,-15 H-11 M-15,-19 V-11"/></g>
+          <g id="gnd" class="sym"><path d="M0,-8 V4"/><path d="M-12,4 H12"/><path d="M-7,10 H7"/><path d="M-3,16 H3"/></g>
+          <g id="diode" class="sym"><path d="M0,-22 V-8"/><polygon points="-9,-8 9,-8 0,7" class="fillc"/><path d="M-11,7 H11"/><path d="M0,7 V22"/></g>
+          <g id="ind" class="sym"><path d="M0,-26 V-18 A6,6 0 0,1 0,-6 A6,6 0 0,1 0,6 A6,6 0 0,1 0,18 V26"/></g>
+          <g id="fuse" class="sym"><path d="M-36,0 H-22"/><rect x="-22" y="-9" width="44" height="18" rx="9"/><path d="M22,0 H36"/></g>
+          <g id="btn" class="sym"><path d="M-32,0 H-13"/><path d="M13,0 H32"/><circle cx="-13" cy="0" r="3.5" class="fillc"/><circle cx="13" cy="0" r="3.5" class="fillc"/><path d="M-17,-15 H17"/><path d="M0,-15 V-5"/></g>
+          <g id="npn" class="sym">
+            <circle cx="0" cy="0" r="26"/>
+            <path d="M-34,0 H-8"/><path d="M-8,-15 V15"/>
+            <path d="M-8,-7 L12,-19 L12,-38"/><path d="M-8,7 L12,19 L12,38"/>
+            <polygon points="7.4,16.4 -1.6,15.6 2.2,8.6" class="fillc"/>
+          </g>
+        </defs>
+          <rect x="24" y="24" width="1452" height="2612" class="frame" rx="6"/>
+
+          <!-- =================================================================== -->
+          <!-- BAND A · POWER SUPPLY                                                -->
+          <!-- =================================================================== -->
+          <text x="60" y="82" class="hdr">A · POWER SUPPLY</text>
+          <line x1="60" y1="96" x2="1440" y2="96" class="band"/>
+
+          <!-- J1 -->
+          <rect x="60" y="118" width="74" height="94" class="box" rx="4"/>
+          <text x="60" y="110" class="ref">J1</text>
+          <text x="97" y="152" class="pin" text-anchor="middle">12 V</text>
+          <text x="97" y="170" class="pin" text-anchor="middle">DC IN</text>
+          <text x="97" y="192" class="tiny" text-anchor="middle">5 A</text>
+
+          <g class="c12">
+            <path d="M134,145 H172" class="w"/>
+            <use href="#fuse" transform="translate(208,145)"/>
+            <text x="208" y="122" class="ref" text-anchor="middle">F1</text>
+            <text x="208" y="176" class="val" text-anchor="middle">3 A</text>
+            <path d="M244,145 H900" class="w"/>
+            <path d="M320,145 V113" class="w"/><path d="M308,113 H332" class="w"/>
+            <text x="320" y="103" class="net" text-anchor="middle">+12V</text>
+            <circle cx="320" cy="145" r="4" class="dot"/>
+            <!-- C1 -->
+            <path d="M390,145 V178" class="w"/>
+            <use href="#capp" transform="translate(390,200)"/>
+            <path d="M390,222 V310" class="w"/>
+            <circle cx="390" cy="145" r="4" class="dot"/><circle cx="390" cy="310" r="4" class="dot"/>
+            <text x="366" y="196" class="ref" text-anchor="end">C1</text>
+            <text x="366" y="213" class="val" text-anchor="end">470 µF 25 V</text>
+            <!-- to buck -->
+            <path d="M430,145 V196 H480" class="w"/><circle cx="430" cy="145" r="4" class="dot"/>
+            <polygon points="900,139 900,151 909,145" class="fillc"/>
+            <text x="915" y="150" class="net">+12V  → K1 COM</text>
+          </g>
+
+          <!-- U1 buck -->
+          <rect x="480" y="170" width="212" height="132" class="box" rx="4"/>
+          <text x="480" y="162" class="ref">U1</text>
+          <text x="586" y="212" class="name" text-anchor="middle">HW-688</text>
+          <text x="586" y="232" class="sub" text-anchor="middle">12–24 V → 5 V · 6 A</text>
+          <text x="586" y="252" class="tiny" text-anchor="middle">set to 5.00 V first</text>
+          <text x="490" y="200" class="pin">IN+</text>
+          <text x="490" y="280" class="pin">IN−</text>
+          <text x="682" y="200" class="pin" text-anchor="end">OUT+</text>
+          <text x="682" y="280" class="pin" text-anchor="end">OUT−</text>
+
+          <g class="cg">
+            <path d="M134,190 H172 V310 H1160" class="w"/>
+            <path d="M460,310 V276 H480" class="w"/><circle cx="460" cy="310" r="4" class="dot"/>
+            <path d="M692,276 H730 V310" class="w"/><circle cx="730" cy="310" r="4" class="dot"/>
+            <use href="#gnd" transform="translate(260,318)"/>
+            <circle cx="260" cy="310" r="4" class="dot"/>
+            <polygon points="1160,304 1160,316 1169,310" class="fillc"/>
+            <text x="1175" y="315" class="net">GND</text>
+          </g>
+
+          <g class="c5">
+            <path d="M692,196 H1160" class="w"/>
+            <path d="M830,196 V178" class="w"/>
+            <use href="#capp" transform="translate(830,200)"/>
+            <path d="M830,222 V296" class="w"/>
+            <use href="#gnd" transform="translate(830,304)"/>
+            <circle cx="830" cy="196" r="4" class="dot"/>
+            <text x="806" y="250" class="ref" text-anchor="end">C2</text>
+            <text x="806" y="267" class="val" text-anchor="end">1000 µF 10 V</text>
+            <path d="M950,196 V240" class="w"/>
+            <use href="#cap" transform="translate(950,262)"/>
+            <path d="M950,284 V296" class="w"/>
+            <use href="#gnd" transform="translate(950,304)"/>
+            <circle cx="950" cy="196" r="4" class="dot"/>
+            <text x="972" y="258" class="ref">C3</text>
+            <text x="972" y="275" class="val">100 nF</text>
+            <path d="M1060,196 V164" class="w"/><path d="M1048,164 H1072" class="w"/>
+            <text x="1060" y="154" class="net" text-anchor="middle">+5V</text>
+            <circle cx="1060" cy="196" r="4" class="dot"/>
+            <polygon points="1160,190 1160,202 1169,196" class="fillc"/>
+            <text x="1175" y="201" class="net">+5V</text>
+          </g>
+          <text x="1175" y="232" class="tiny">+3V3 comes from the ESP32's</text>
+          <text x="1175" y="248" class="tiny">on-board LDO — see block B.</text>
+
+          <!-- =================================================================== -->
+          <!-- BAND B · MCU                                                         -->
+          <!-- =================================================================== -->
+          <text x="60" y="402" class="hdr">B · MCU</text>
+          <line x1="60" y1="416" x2="1440" y2="416" class="band"/>
+
+          <rect x="520" y="440" width="440" height="440" class="box" rx="4"/>
+          <text x="520" y="432" class="ref">U2</text>
+          <text x="740" y="480" class="name" text-anchor="middle">ESP32-S3-DevKitC-1</text>
+          <text x="740" y="500" class="sub" text-anchor="middle">N16R8 · 16 MB flash · 8 MB PSRAM</text>
+
+          <!-- power pins -->
+          <g class="c33">
+            <path d="M520,540 H210" class="w"/>
+            <path d="M210,540 V508" class="w"/><path d="M198,508 H222" class="w"/>
+            <text x="210" y="498" class="net" text-anchor="middle">+3V3</text>
+            <path d="M280,540 V576" class="w"/>
+            <use href="#cap" transform="translate(280,598)"/>
+            <path d="M280,620 V638" class="w"/>
+            <use href="#gnd" transform="translate(280,646)"/>
+            <circle cx="280" cy="540" r="4" class="dot"/>
+            <text x="302" y="594" class="ref">C4</text>
+            <text x="302" y="611" class="val">100 nF</text>
+            <text x="118" y="568" class="tiny">→ J2 · J3 · J5 · K1</text>
+          </g>
+          <text x="532" y="545" class="pin">3V3</text>
+
+          <g class="cg">
+            <path d="M520,578 H350 V616" class="w"/>
+            <use href="#gnd" transform="translate(350,624)"/>
+          </g>
+          <text x="532" y="583" class="pin">GND</text>
+
+          <g class="c5">
+            <path d="M520,616 H400" class="w"/>
+            <polygon points="400,610 400,622 391,616 " class="fillc"/>
+            <text x="385" y="621" class="net" text-anchor="end">+5V</text>
+          </g>
+          <text x="532" y="621" class="pin">5V</text>
+
+          <!-- left signal pins -->
+          <g>
+            <path d="M520,672 H430" class="w"/><polygon points="430,666 430,678 421,672" class="fillc"/>
+            <text x="415" y="677" class="net" text-anchor="end">FP_TXD</text>
+            <text x="532" y="677" class="pin">GPIO18</text>
+
+            <path d="M520,706 H430" class="w"/><polygon points="430,700 430,712 421,706" class="fillc"/>
+            <text x="415" y="711" class="net" text-anchor="end">FP_RXD</text>
+            <text x="532" y="711" class="pin">GPIO17</text>
+
+            <path d="M520,740 H430" class="w"/><polygon points="430,734 430,746 421,740" class="fillc"/>
+            <text x="415" y="745" class="net" text-anchor="end">FP_WAKE</text>
+            <text x="532" y="745" class="pin">GPIO16</text>
+
+            <path d="M520,782 H430" class="w"/><polygon points="430,776 430,788 421,782" class="fillc"/>
+            <text x="415" y="787" class="net" text-anchor="end">DOOR_D0</text>
+            <text x="532" y="787" class="pin">GPIO41</text>
+
+            <path d="M520,816 H430" class="w"/><polygon points="430,810 430,822 421,816" class="fillc"/>
+            <text x="415" y="821" class="net" text-anchor="end">EXIT_SW</text>
+            <text x="532" y="821" class="pin">GPIO39</text>
+
+            <path d="M520,850 H430" class="w"/><polygon points="430,844 430,856 421,850" class="fillc"/>
+            <text x="415" y="855" class="net" text-anchor="end">BUZZ_DRV</text>
+            <text x="532" y="855" class="pin">GPIO42</text>
+          </g>
+
+          <!-- right signal pins -->
+          <g>
+            <path d="M960,480 H1050" class="w"/><polygon points="1050,474 1050,486 1059,480" class="fillc"/>
+            <text x="1065" y="485" class="net">SPI_SCK</text><text x="948" y="485" class="pin" text-anchor="end">GPIO12</text>
+
+            <path d="M960,508 H1050" class="w"/><polygon points="1050,502 1050,514 1059,508" class="fillc"/>
+            <text x="1065" y="513" class="net">SPI_MOSI</text><text x="948" y="513" class="pin" text-anchor="end">GPIO11</text>
+
+            <path d="M960,536 H1050" class="w"/><polygon points="1050,530 1050,542 1059,536" class="fillc"/>
+            <text x="1065" y="541" class="net">SPI_MISO</text><text x="948" y="541" class="pin" text-anchor="end">GPIO13</text>
+
+            <path d="M960,564 H1050" class="w"/><polygon points="1050,558 1050,570 1059,564" class="fillc"/>
+            <text x="1065" y="569" class="net">TFT_CS</text><text x="948" y="569" class="pin" text-anchor="end">GPIO10</text>
+
+            <path d="M960,592 H1050" class="w"/><polygon points="1050,586 1050,598 1059,592" class="fillc"/>
+            <text x="1065" y="597" class="net">TFT_DC</text><text x="948" y="597" class="pin" text-anchor="end">GPIO9</text>
+
+            <path d="M960,620 H1050" class="w"/><polygon points="1050,614 1050,626 1059,620" class="fillc"/>
+            <text x="1065" y="625" class="net">TFT_RST</text><text x="948" y="625" class="pin" text-anchor="end">GPIO14</text>
+
+            <path d="M960,648 H1050" class="w"/><polygon points="1050,642 1050,654 1059,648" class="fillc"/>
+            <text x="1065" y="653" class="net">SD_CS</text><text x="948" y="653" class="pin" text-anchor="end">GPIO47</text>
+
+            <path d="M960,676 H1050" class="w"/>
+            <text x="1065" y="681" class="net cmute">TFT_BL  (optional)</text><text x="948" y="681" class="pin" text-anchor="end">GPIO21</text>
+
+            <path d="M960,720 H1050" class="w"/><polygon points="1050,714 1050,726 1059,720" class="fillc"/>
+            <text x="1065" y="725" class="net">MDM_RX</text><text x="948" y="725" class="pin" text-anchor="end">GPIO5</text>
+
+            <path d="M960,748 H1050" class="w"/><polygon points="1050,742 1050,754 1059,748" class="fillc"/>
+            <text x="1065" y="753" class="net">MDM_TX</text><text x="948" y="753" class="pin" text-anchor="end">GPIO4</text>
+
+            <path d="M960,776 H1050" class="w"/><polygon points="1050,770 1050,782 1059,776" class="fillc"/>
+            <text x="1065" y="781" class="net">MDM_PWK</text><text x="948" y="781" class="pin" text-anchor="end">GPIO6</text>
+
+            <path d="M960,804 H1050" class="w"/><polygon points="1050,798 1050,810 1059,804" class="fillc"/>
+            <text x="1065" y="809" class="net">MDM_NET</text><text x="948" y="809" class="pin" text-anchor="end">GPIO7</text>
+
+            <path d="M960,848 H1050" class="w"/><polygon points="1050,842 1050,854 1059,848" class="fillc"/>
+            <text x="1065" y="853" class="net">LOCK_IN</text><text x="948" y="853" class="pin" text-anchor="end">GPIO40</text>
+          </g>
+
+          <!-- reserved pin note -->
+          <rect x="1218" y="452" width="222" height="180" rx="5" fill="var(--surface-2)" stroke="var(--rule-2)" stroke-width="1.5"/>
+          <text x="1234" y="476" class="ref">DO NOT USE</text>
+          <text x="1234" y="500" class="tiny">26–37  flash + octal PSRAM</text>
+          <text x="1234" y="520" class="tiny">19, 20  native USB</text>
+          <text x="1234" y="540" class="tiny">43, 44  UART0 console</text>
+          <text x="1234" y="560" class="tiny">0, 3, 45, 46  strapping</text>
+          <text x="1234" y="580" class="tiny">38 / 48  on-board RGB LED</text>
+          <text x="1234" y="608" class="tiny">Touching 26–37 breaks boot</text>
+          <text x="1234" y="624" class="tiny">on the N16R8 variant.</text>
+
+          <!-- =================================================================== -->
+          <!-- BAND C · FINGERPRINT + DISPLAY                                       -->
+          <!-- =================================================================== -->
+          <text x="60" y="936" class="hdr">C · FINGERPRINT SENSOR &amp; DISPLAY</text>
+          <line x1="60" y1="950" x2="1440" y2="950" class="band"/>
+
+          <!-- J2 R503 -->
+          <rect x="180" y="1030" width="172" height="212" class="box" rx="4"/>
+          <text x="180" y="1022" class="ref">J2</text>
+          <text x="352" y="1022" class="sub" text-anchor="end">fingerprint sensor</text>
+          <text x="232" y="1140" class="name" text-anchor="middle">R503</text>
+
+          <g class="c33">
+            <path d="M110,990 H290" class="w"/>
+            <path d="M240,990 V1030" class="w"/><circle cx="240" cy="990" r="4" class="dot"/>
+            <path d="M290,990 V1030" class="w"/>
+            <path d="M110,990 V966" class="w"/><path d="M98,966 H122" class="w"/>
+            <text x="110" y="956" class="net" text-anchor="middle">+3V3</text>
+            <path d="M150,990 V1046" class="w"/>
+            <use href="#cap" transform="translate(150,1068)"/>
+            <path d="M150,1090 V1116" class="w"/>
+            <use href="#gnd" transform="translate(150,1124)"/>
+            <circle cx="150" cy="990" r="4" class="dot"/>
+            <text x="128" y="1064" class="ref" text-anchor="end">C5</text>
+            <text x="128" y="1081" class="val" text-anchor="end">100 nF</text>
+          </g>
+          <text x="247" y="1014" class="tiny">1 VCC</text>
+          <text x="297" y="1014" class="tiny">6 3V3T</text>
+
+          <g>
+            <path d="M352,1122 H440" class="w"/><polygon points="440,1116 440,1128 449,1122" class="fillc"/>
+            <text x="455" y="1127" class="net">FP_TXD</text><text x="340" y="1127" class="pin" text-anchor="end">3 TXD</text>
+
+            <path d="M352,1156 H440" class="w"/><polygon points="440,1150 440,1162 449,1156" class="fillc"/>
+            <text x="455" y="1161" class="net">FP_RXD</text><text x="340" y="1161" class="pin" text-anchor="end">4 RXD</text>
+
+            <path d="M352,1190 H440" class="w"/><polygon points="440,1184 440,1196 449,1190" class="fillc"/>
+            <text x="455" y="1195" class="net">FP_WAKE</text><text x="340" y="1195" class="pin" text-anchor="end">5 WAKE</text>
+          </g>
+          <g class="cg">
+            <path d="M352,1224 H400 V1266" class="w"/>
+            <use href="#gnd" transform="translate(400,1274)"/>
+          </g>
+          <text x="340" y="1229" class="pin" text-anchor="end">2 GND</text>
+
+          <!-- J3 display -->
+          <rect x="800" y="1030" width="200" height="300" class="box" rx="4"/>
+          <text x="800" y="1022" class="ref">J3</text>
+          <text x="1000" y="1022" class="sub" text-anchor="end">MD0671 · 240×320 TFT + SD</text>
+          <text x="893" y="1080" class="name" text-anchor="middle">ILI9341</text>
+
+          <g class="c33">
+            <path d="M800,1130 H620" class="w"/>
+            <path d="M800,1160 H730 V1130" class="w"/><circle cx="730" cy="1130" r="4" class="dot"/>
+            <path d="M680,1130 V1100" class="w"/><path d="M668,1100 H692" class="w"/>
+            <text x="680" y="1090" class="net" text-anchor="middle">+3V3</text>
+            <circle cx="680" cy="1130" r="4" class="dot"/>
+            <path d="M630,1130 V1176" class="w"/>
+            <use href="#cap" transform="translate(630,1198)"/>
+            <path d="M630,1220 V1244" class="w"/>
+            <use href="#gnd" transform="translate(630,1252)"/>
+            <circle cx="630" cy="1130" r="4" class="dot"/>
+            <text x="608" y="1194" class="ref" text-anchor="end">C6</text>
+            <text x="608" y="1211" class="val" text-anchor="end">100 nF</text>
+          </g>
+          <text x="812" y="1135" class="pin">VCC</text>
+          <text x="812" y="1165" class="pin">LED</text>
+          <g class="cg">
+            <path d="M800,1190 H752 V1232" class="w"/>
+            <use href="#gnd" transform="translate(752,1240)"/>
+          </g>
+          <text x="812" y="1195" class="pin">GND</text>
+
+          <g>
+            <path d="M1000,1080 H1090" class="w"/><polygon points="1090,1074 1090,1086 1099,1080" class="fillc"/>
+            <text x="1105" y="1085" class="net">TFT_CS</text><text x="988" y="1085" class="pin" text-anchor="end">CS</text>
+
+            <path d="M1000,1110 H1090" class="w"/><polygon points="1090,1104 1090,1116 1099,1110" class="fillc"/>
+            <text x="1105" y="1115" class="net">TFT_RST</text><text x="988" y="1115" class="pin" text-anchor="end">RESET</text>
+
+            <path d="M1000,1140 H1090" class="w"/><polygon points="1090,1134 1090,1146 1099,1140" class="fillc"/>
+            <text x="1105" y="1145" class="net">TFT_DC</text><text x="988" y="1145" class="pin" text-anchor="end">DC</text>
+
+            <path d="M1000,1180 H1090" class="w"/><polygon points="1090,1174 1090,1186 1099,1180" class="fillc"/>
+            <text x="1105" y="1185" class="net">SPI_MOSI</text><text x="988" y="1185" class="pin" text-anchor="end">SDI</text>
+
+            <path d="M1000,1210 H1090" class="w"/><polygon points="1090,1204 1090,1216 1099,1210" class="fillc"/>
+            <text x="1105" y="1215" class="net">SPI_SCK</text><text x="988" y="1215" class="pin" text-anchor="end">SCK</text>
+
+            <path d="M1000,1240 H1090" class="w"/><polygon points="1090,1234 1090,1246 1099,1240" class="fillc"/>
+            <text x="1105" y="1245" class="net">SPI_MISO</text><text x="988" y="1245" class="pin" text-anchor="end">SDO</text>
+
+            <path d="M1000,1285 H1090" class="w"/><polygon points="1090,1279 1090,1291 1099,1285" class="fillc"/>
+            <text x="1105" y="1290" class="net">SD_CS</text><text x="988" y="1290" class="pin" text-anchor="end">SD_CS</text>
+          </g>
+          <text x="900" y="1356" class="tiny" text-anchor="middle">SD_MOSI / SD_SCK / SD_MISO → the same three SPI nets</text>
+
+          <rect x="1218" y="1060" width="222" height="150" rx="5" fill="var(--surface-2)" stroke="var(--rule-2)" stroke-width="1.5"/>
+          <text x="1234" y="1084" class="ref">SPI BUS</text>
+          <text x="1234" y="1108" class="tiny">Display and SD card share</text>
+          <text x="1234" y="1126" class="tiny">SPI2. Only one chip select</text>
+          <text x="1234" y="1144" class="tiny">may be LOW at a time.</text>
+          <text x="1234" y="1172" class="tiny">LED tied to +3V3 = backlight</text>
+          <text x="1234" y="1190" class="tiny">always on. For dimming, add</text>
+          <text x="1234" y="1208" class="tiny">a P-MOSFET on TFT_BL.</text>
+
+          <!-- =================================================================== -->
+          <!-- BAND D · MODEM                                                       -->
+          <!-- =================================================================== -->
+          <text x="60" y="1392" class="hdr">D · 4G MODEM</text>
+          <line x1="60" y1="1406" x2="1440" y2="1406" class="band"/>
+
+          <rect x="760" y="1440" width="200" height="240" class="box" rx="4"/>
+          <text x="760" y="1432" class="ref">J4</text>
+          <text x="960" y="1432" class="sub" text-anchor="end">FS-MCore · 4G LTE Cat.1</text>
+          <text x="859" y="1602" class="name" text-anchor="middle">A7670C</text>
+
+          <g class="c5">
+            <path d="M760,1490 H520" class="w"/>
+            <path d="M520,1490 V1458" class="w"/><path d="M508,1458 H532" class="w"/>
+            <text x="520" y="1448" class="net" text-anchor="middle">+5V</text>
+            <path d="M600,1490 V1536" class="w"/>
+            <use href="#capp" transform="translate(600,1558)"/>
+            <path d="M600,1580 V1604" class="w"/>
+            <use href="#gnd" transform="translate(600,1612)"/>
+            <circle cx="600" cy="1490" r="4" class="dot"/>
+            <text x="576" y="1554" class="ref" text-anchor="end">C7</text>
+            <text x="576" y="1571" class="val" text-anchor="end">1000 µF</text>
+            <path d="M700,1490 V1536" class="w"/>
+            <use href="#cap" transform="translate(700,1558)"/>
+            <path d="M700,1580 V1604" class="w"/>
+            <use href="#gnd" transform="translate(700,1612)"/>
+            <circle cx="700" cy="1490" r="4" class="dot"/>
+            <text x="676" y="1554" class="ref" text-anchor="end">C8</text>
+            <text x="676" y="1571" class="val" text-anchor="end">100 nF</text>
+          </g>
+          <text x="772" y="1495" class="pin">VIN</text>
+          <text x="772" y="1655" class="pin">PEN</text>
+          <path d="M760,1650 H706" class="w"/>
+          <text x="698" y="1655" class="tiny" text-anchor="end">n.c.</text>
+
+          <g class="cg">
+            <path d="M860,1680 V1722" class="w"/>
+            <use href="#gnd" transform="translate(860,1730)"/>
+          </g>
+          <text x="860" y="1670" class="pin" text-anchor="middle">GND</text>
+
+          <g>
+            <path d="M960,1480 H1050" class="w"/><polygon points="1050,1474 1050,1486 1059,1480" class="fillc"/>
+            <text x="1065" y="1485" class="net">MDM_TX</text><text x="948" y="1485" class="pin" text-anchor="end">TX</text>
+
+            <path d="M960,1520 H1050" class="w"/><polygon points="1050,1514 1050,1526 1059,1520" class="fillc"/>
+            <text x="1065" y="1525" class="net">MDM_RX</text><text x="948" y="1525" class="pin" text-anchor="end">RX</text>
+
+            <path d="M960,1660 H1050" class="w"/><polygon points="1050,1654 1050,1666 1059,1660" class="fillc"/>
+            <text x="1065" y="1665" class="net">MDM_NET</text><text x="948" y="1665" class="pin" text-anchor="end">NET</text>
+
+            <path d="M960,1560 H1312 V1582" class="w"/>
+            <text x="948" y="1565" class="pin" text-anchor="end">PWK</text>
+          </g>
+
+          <!-- Q1 PWRKEY driver -->
+          <use href="#npn" transform="translate(1300,1620)"/>
+          <path d="M1312,1658 V1690" class="w"/>
+          <g class="cg"><use href="#gnd" transform="translate(1312,1698)"/></g>
+          <text x="1350" y="1614" class="ref">Q1</text>
+          <text x="1350" y="1631" class="val">2N3904</text>
+          <path d="M1266,1620 H1222" class="w"/>
+          <use href="#res" transform="translate(1200,1620) rotate(90)"/>
+          <path d="M1178,1620 H1136" class="w"/>
+          <polygon points="1136,1614 1136,1626 1127,1620" class="fillc"/>
+          <text x="1121" y="1625" class="net" text-anchor="end">MDM_PWK</text>
+          <text x="1200" y="1586" class="ref" text-anchor="middle">R1</text>
+          <text x="1200" y="1602" class="val" text-anchor="middle">1 kΩ</text>
+          <text x="1230" y="1730" class="tiny" text-anchor="middle">drive HIGH 1 s → PWK low, then wait 5 s</text>
+
+          <!-- =================================================================== -->
+          <!-- BAND E · LOCK DRIVE                                                  -->
+          <!-- =================================================================== -->
+          <text x="60" y="1800" class="hdr">E · DOOR LOCK DRIVE</text>
+          <line x1="60" y1="1814" x2="1440" y2="1814" class="band"/>
+
+          <rect x="520" y="1856" width="280" height="250" class="box" rx="4"/>
+          <text x="520" y="1848" class="ref">K1</text>
+          <text x="800" y="1848" class="sub" text-anchor="end">1-channel relay · optocoupled</text>
+          <line x1="690" y1="1930" x2="690" y2="2086" stroke="var(--rule-2)" stroke-width="1.5" stroke-dasharray="5 4"/>
+          <text x="690" y="2100" class="tiny" text-anchor="middle">opto barrier</text>
+          <rect x="546" y="1928" width="126" height="22" rx="4" fill="none" stroke="var(--crit)" stroke-width="1.4" stroke-dasharray="4 3"/>
+          <text x="609" y="1943" class="tiny" text-anchor="middle" fill="var(--crit)">jumper REMOVED</text>
+
+          <!-- left: VCC / IN / GND -->
+          <g class="c33">
+            <path d="M520,1980 H400" class="w"/>
+            <path d="M400,1980 V1876" class="w"/><path d="M388,1876 H412" class="w"/>
+            <text x="400" y="1866" class="net" text-anchor="middle">+3V3</text>
+            <use href="#res" transform="translate(350,1876)"/>
+            <path d="M350,1854 V1836" class="w"/>
+            <path d="M338,1836 H362" class="w"/>
+            <text x="350" y="1826" class="net" text-anchor="middle">+3V3</text>
+            <text x="326" y="1872" class="ref" text-anchor="end">R2</text>
+            <text x="326" y="1889" class="val" text-anchor="end">10 kΩ</text>
+          </g>
+          <text x="532" y="1985" class="pin">VCC</text>
+
+          <path d="M520,2020 H290" class="w"/>
+          <path d="M350,2020 V1898" class="w"/>
+          <circle cx="350" cy="2020" r="4" class="dot"/>
+          <polygon points="290,2014 290,2026 281,2020" class="fillc"/>
+          <text x="275" y="2025" class="net" text-anchor="end">LOCK_IN</text>
+          <text x="532" y="2025" class="pin">IN</text>
+          <text x="418" y="2044" class="tiny">active LOW</text>
+
+          <g class="cg">
+            <path d="M520,2060 H460 V2098" class="w"/>
+            <use href="#gnd" transform="translate(460,2106)"/>
+          </g>
+          <text x="532" y="2065" class="pin">GND</text>
+
+          <!-- right: JD-VCC / contacts -->
+          <g class="c5">
+            <path d="M800,1900 H900 V1868" class="w"/>
+            <path d="M888,1868 H912" class="w"/>
+            <text x="900" y="1858" class="net" text-anchor="middle">+5V</text>
+          </g>
+          <text x="788" y="1905" class="pin" text-anchor="end">JD-VCC</text>
+
+          <g class="c12">
+            <path d="M800,1980 H960 V1930" class="w"/>
+            <path d="M948,1930 H972" class="w"/>
+            <text x="960" y="1920" class="net" text-anchor="middle">+12V</text>
+            <path d="M800,2020 H1200" class="w"/>
+          </g>
+          <text x="788" y="1985" class="pin" text-anchor="end">COM</text>
+          <text x="788" y="2025" class="pin" text-anchor="end">NO</text>
+          <path d="M800,2060 H850" class="w"/>
+          <text x="788" y="2065" class="pin" text-anchor="end">NC</text>
+          <text x="858" y="2065" class="tiny">n.c.</text>
+
+          <!-- L1 solenoid + D1 -->
+          <use href="#ind" transform="translate(1200,2062)"/>
+          <path d="M1200,2088 V2120" class="w"/>
+          <g class="cg"><use href="#gnd" transform="translate(1200,2128)"/></g>
+          <text x="1236" y="2046" class="ref">L1</text>
+          <text x="1236" y="2063" class="val">12 V solenoid</text>
+          <text x="1236" y="2080" class="tiny">0.6–1.5 A, intermittent</text>
+
+          <g class="ccrit">
+            <path d="M1110,2020 V2036" class="w"/>
+            <circle cx="1110" cy="2020" r="4" class="dot"/>
+            <use href="#diode" transform="translate(1110,2065) rotate(180)"/>
+            <path d="M1110,2094 V2120 H1200" class="w"/>
+            <circle cx="1200" cy="2120" r="4" class="dot"/>
+            <text x="1072" y="2058" class="ref" text-anchor="end">D1</text>
+            <text x="1072" y="2075" class="val" text-anchor="end">1N4007</text>
+            <text x="1072" y="2092" class="tiny" text-anchor="end">cathode up</text>
+          </g>
+
+          <!-- =================================================================== -->
+          <!-- BAND F · INPUTS + BUZZER                                             -->
+          <!-- =================================================================== -->
+          <text x="60" y="2200" class="hdr">F · INPUTS &amp; AUDIBLE FEEDBACK</text>
+          <line x1="60" y1="2214" x2="1440" y2="2214" class="band"/>
+
+          <!-- J5 reed -->
+          <rect x="140" y="2250" width="172" height="140" class="box" rx="4"/>
+          <text x="140" y="2242" class="ref">J5</text>
+          <text x="312" y="2242" class="sub" text-anchor="end">reed switch + LM393</text>
+          <text x="210" y="2312" class="name" text-anchor="middle">KY-025</text>
+          <text x="210" y="2338" class="tiny" text-anchor="middle">A0 n.c.</text>
+
+          <g class="c33">
+            <path d="M312,2286 H374 V2254" class="w"/>
+            <path d="M362,2254 H386" class="w"/>
+            <text x="374" y="2244" class="net" text-anchor="middle">+3V3</text>
+          </g>
+          <text x="300" y="2291" class="pin" text-anchor="end">+</text>
+
+          <path d="M312,2322 H404" class="w"/>
+          <polygon points="404,2316 404,2328 413,2322" class="fillc"/>
+          <text x="419" y="2327" class="net">DOOR_D0</text>
+          <text x="300" y="2327" class="pin" text-anchor="end">D0</text>
+
+          <g class="cg">
+            <path d="M312,2358 H350 V2398" class="w"/>
+            <use href="#gnd" transform="translate(350,2406)"/>
+          </g>
+          <text x="300" y="2363" class="pin" text-anchor="end">G</text>
+
+          <!-- SW1 exit button -->
+          <use href="#btn" transform="translate(690,2300)"/>
+          <text x="690" y="2246" class="ref" text-anchor="middle">SW1</text>
+          <text x="690" y="2263" class="val" text-anchor="middle">exit button</text>
+          <path d="M658,2300 H570" class="w"/>
+          <polygon points="570,2294 570,2306 561,2300" class="fillc"/>
+          <text x="555" y="2305" class="net" text-anchor="end">EXIT_SW</text>
+          <g class="cg">
+            <path d="M722,2300 H790 V2348" class="w"/>
+            <use href="#gnd" transform="translate(790,2356)"/>
+          </g>
+          <path d="M614,2300 V2340" class="w"/>
+          <circle cx="614" cy="2300" r="4" class="dot"/>
+          <use href="#cap" transform="translate(614,2362)"/>
+          <path d="M614,2384 V2404" class="w"/>
+          <g class="cg"><use href="#gnd" transform="translate(614,2412)"/></g>
+          <text x="636" y="2358" class="ref">C9</text>
+          <text x="636" y="2375" class="val">100 nF</text>
+          <text x="690" y="2452" class="tiny" text-anchor="middle">GPIO39 uses INPUT_PULLUP — no external pull-up resistor needed</text>
+
+          <!-- LS1 buzzer + Q2 -->
+          <g class="c5">
+            <path d="M1100,2246 V2278" class="w"/>
+            <path d="M1088,2246 H1112" class="w"/>
+            <text x="1100" y="2236" class="net" text-anchor="middle">+5V</text>
+          </g>
+          <rect x="1058" y="2278" width="84" height="54" class="box" rx="4"/>
+          <text x="1058" y="2270" class="ref">LS1</text>
+          <text x="1100" y="2311" class="pin" text-anchor="middle">buzzer</text>
+          <path d="M1100,2332 V2352 H1152 V2372" class="w"/>
+          <use href="#npn" transform="translate(1140,2410)"/>
+          <path d="M1152,2448 V2470" class="w"/>
+          <g class="cg"><use href="#gnd" transform="translate(1152,2478)"/></g>
+          <text x="1192" y="2404" class="ref">Q2</text>
+          <text x="1192" y="2421" class="val">2N3904</text>
+          <path d="M1106,2410 H1062" class="w"/>
+          <use href="#res" transform="translate(1040,2410) rotate(90)"/>
+          <path d="M1018,2410 H962" class="w"/>
+          <polygon points="962,2404 962,2416 953,2410" class="fillc"/>
+          <text x="947" y="2415" class="net" text-anchor="end">BUZZ_DRV</text>
+          <text x="1040" y="2376" class="ref" text-anchor="middle">R3</text>
+          <text x="1040" y="2392" class="val" text-anchor="middle">1 kΩ</text>
+
+          <!-- =================================================================== -->
+          <!-- TITLE BLOCK                                                          -->
+          <!-- =================================================================== -->
+          <rect x="60" y="2510" width="560" height="106" rx="5" fill="var(--surface-2)" stroke="var(--rule-2)" stroke-width="1.5"/>
+          <text x="78" y="2540" class="name">NOVA FITNESS — Door Controller</text>
+          <text x="78" y="2564" class="sub">Biometric access unit · schematic sheet 1 of 1</text>
+          <text x="78" y="2590" class="tiny">Rev A · ESP32-S3 N16R8 · 12 V single-supply · fail-secure lock</text>
+          <text x="78" y="2606" class="tiny">Verify connector orientation on your own modules before power-up.</text>
+
+          <rect x="650" y="2510" width="790" height="106" rx="5" fill="var(--surface-2)" stroke="var(--rule-2)" stroke-width="1.5"/>
+          <text x="668" y="2534" class="ref">SHEET NOTES</text>
+          <text x="668" y="2558" class="tiny">1 · Net labels with the same name are the same wire. Power flags (+12V, +5V, +3V3) and ground symbols are global.</text>
+          <text x="668" y="2576" class="tiny">2 · +3V3 is produced by U2's on-board LDO. Do not add 3.3 V loads beyond J2, J3, J5 and K1's opto input.</text>
+          <text x="668" y="2594" class="tiny">3 · J4's VIN and GND run as their own pair to U1's output terminal — not through U2 — because of 2.3 A LTE bursts.</text>
+          <text x="668" y="2612" class="tiny">4 · Remove K1's VCC↔JD-VCC jumper. R2 keeps LOCK_IN HIGH through reset so the lock stays shut.</text>
+        </g>
+      </svg>
+    </div>
+    <figcaption><b>Sheet 1 — Complete schematic.</b> Zoom in; it is drawn at a size that stays legible at 200%. Reference designators match the bill of materials in section 08, so <code>C7</code> on the sheet is the 1000 µF electrolytic on the shopping list. The three transistor/resistor stages — <code>R1/Q1</code> for the modem's power key, <code>R2</code> pulling the relay input high, <code>R3/Q2</code> for the buzzer — are the only active circuitry outside the modules themselves.</figcaption>
+  </figure>
+</section>
+
+<!-- ============ 1. MASTER SIGNAL WIRING ============ -->
+<section>
+  <div class="sec-head"><span class="sec-num">02</span><h2>Signal overview</h2></div>
+  <p class="sec-sub">Every logic connection between the ESP32‑S3 and the peripherals. Power rails are deliberately left out of this drawing — they get their own diagram in section 02, so neither picture ends up a tangle.</p>
+
+  <figure>
+    <div class="figbody">
+      <svg viewBox="0 0 1160 800" role="img" aria-label="Signal wiring diagram: the ESP32-S3 DevKitC-1 sits in the centre; the R503 fingerprint sensor, KY-025 reed switch, exit button and buzzer connect on the left; the ILI9341 display, A7670C 4G modem and relay module connect on the right, each with its GPIO assignment.">
+        <g font-family="'IBM Plex Mono', monospace" font-size="11" fill="var(--ink-2)">
+
+          <!-- ===== ESP32 block ===== -->
+          <rect x="450" y="70" width="260" height="680" rx="7" fill="var(--surface-2)" stroke="var(--ink)" stroke-width="2"/>
+          <text x="580" y="102" text-anchor="middle" font-family="Archivo, sans-serif" font-size="15" font-weight="600" fill="var(--ink)">ESP32-S3 DevKitC-1</text>
+          <text x="580" y="121" text-anchor="middle" font-size="10.5" fill="var(--ink-3)">N16R8 · 3.3 V logic</text>
+          <line x1="470" y1="734" x2="690" y2="734" stroke="var(--rule-2)" stroke-width="1"/>
+          <text x="580" y="729" text-anchor="middle" font-size="10" fill="var(--ink-3)">5V pin ← buck   ·   3V3 pin → sensors</text>
+
+          <!-- ===== LEFT: R503 ===== -->
+          <rect x="40" y="80" width="280" height="150" rx="7" fill="var(--surface-2)" stroke="var(--rule-2)" stroke-width="1.5"/>
+          <text x="60" y="106" font-family="Archivo, sans-serif" font-size="13.5" font-weight="600" fill="var(--ink)">R503 Fingerprint</text>
+          <text x="60" y="123" font-size="10.5" fill="var(--ink-3)">capacitive · RGB ring · 3.3 V only</text>
+          <text x="310" y="156" text-anchor="end">RXD · green</text>
+          <text x="310" y="181" text-anchor="end">TXD · yellow</text>
+          <text x="310" y="206" text-anchor="end">WAKEUP · blue</text>
+          <text x="462" y="156">GPIO17 · TX1</text>
+          <text x="462" y="181">GPIO18 · RX1</text>
+          <text x="462" y="206">GPIO16 · IRQ</text>
+          <text x="385" y="140" text-anchor="middle" font-size="10" fill="var(--ink-3)">UART1 · 57 600 8N1</text>
+          <line x1="450" y1="152" x2="332" y2="152" stroke="var(--data)" stroke-width="2"/>
+          <polygon points="332,148 332,156 322,152" fill="var(--data)"/>
+          <line x1="320" y1="177" x2="438" y2="177" stroke="var(--data)" stroke-width="2"/>
+          <polygon points="438,173 438,181 448,177" fill="var(--data)"/>
+          <line x1="320" y1="202" x2="438" y2="202" stroke="var(--in)" stroke-width="2"/>
+          <polygon points="438,198 438,206 448,202" fill="var(--in)"/>
+
+          <!-- ===== LEFT: KY-025 ===== -->
+          <rect x="40" y="280" width="280" height="100" rx="7" fill="var(--surface-2)" stroke="var(--rule-2)" stroke-width="1.5"/>
+          <text x="60" y="306" font-family="Archivo, sans-serif" font-size="13.5" font-weight="600" fill="var(--ink)">KY-025 Reed Switch</text>
+          <text x="60" y="323" font-size="10.5" fill="var(--ink-3)">door open / closed sense</text>
+          <text x="310" y="356" text-anchor="end">D0</text>
+          <text x="462" y="356">GPIO41</text>
+          <text x="385" y="344" text-anchor="middle" font-size="10" fill="var(--ink-3)">door state</text>
+          <line x1="320" y1="352" x2="438" y2="352" stroke="var(--in)" stroke-width="2"/>
+          <polygon points="438,348 438,356 448,352" fill="var(--in)"/>
+
+          <!-- ===== LEFT: exit button ===== -->
+          <rect x="40" y="430" width="280" height="90" rx="7" fill="var(--surface-2)" stroke="var(--rule-2)" stroke-width="1.5" stroke-dasharray="5 3"/>
+          <text x="60" y="456" font-family="Archivo, sans-serif" font-size="13.5" font-weight="600" fill="var(--ink)">Exit Push Button</text>
+          <text x="60" y="473" font-size="10.5" fill="var(--ink-3)">inside the gym · other side to GND</text>
+          <text x="310" y="504" text-anchor="end">SW</text>
+          <text x="462" y="504">GPIO39</text>
+          <text x="385" y="492" text-anchor="middle" font-size="10" fill="var(--ink-3)">active LOW</text>
+          <line x1="320" y1="500" x2="438" y2="500" stroke="var(--in)" stroke-width="2"/>
+          <polygon points="438,496 438,504 448,500" fill="var(--in)"/>
+
+          <!-- ===== LEFT: buzzer ===== -->
+          <rect x="40" y="570" width="280" height="110" rx="7" fill="var(--surface-2)" stroke="var(--rule-2)" stroke-width="1.5" stroke-dasharray="5 3"/>
+          <text x="60" y="596" font-family="Archivo, sans-serif" font-size="13.5" font-weight="600" fill="var(--ink)">Buzzer + Q2</text>
+          <text x="60" y="613" font-size="10.5" fill="var(--ink-3)">active 5 V · 2N3904 low-side</text>
+          <text x="310" y="649" text-anchor="end">1 kΩ → base</text>
+          <text x="462" y="649">GPIO42</text>
+          <text x="385" y="637" text-anchor="middle" font-size="10" fill="var(--ink-3)">beep</text>
+          <line x1="450" y1="645" x2="332" y2="645" stroke="var(--out)" stroke-width="2"/>
+          <polygon points="332,641 332,649 322,645" fill="var(--out)"/>
+
+          <!-- ===== RIGHT: TFT ===== -->
+          <rect x="840" y="70" width="280" height="250" rx="7" fill="var(--surface-2)" stroke="var(--rule-2)" stroke-width="1.5"/>
+          <text x="860" y="96" font-family="Archivo, sans-serif" font-size="13.5" font-weight="600" fill="var(--ink)">ILI9341 TFT · MD0671</text>
+          <text x="860" y="113" font-size="10.5" fill="var(--ink-3)">240×320 SPI + microSD</text>
+          <text x="850" y="144">SCK</text>
+          <text x="850" y="167">SDI / MOSI</text>
+          <text x="850" y="190">SDO / MISO</text>
+          <text x="850" y="213">CS</text>
+          <text x="850" y="236">DC / RS</text>
+          <text x="850" y="259">RESET</text>
+          <text x="850" y="282">SD_CS</text>
+          <text x="698" y="144" text-anchor="end">GPIO12</text>
+          <text x="698" y="167" text-anchor="end">GPIO11</text>
+          <text x="698" y="190" text-anchor="end">GPIO13</text>
+          <text x="698" y="213" text-anchor="end">GPIO10</text>
+          <text x="698" y="236" text-anchor="end">GPIO9</text>
+          <text x="698" y="259" text-anchor="end">GPIO14</text>
+          <text x="698" y="282" text-anchor="end">GPIO47</text>
+          <text x="775" y="132" text-anchor="middle" font-size="10" fill="var(--ink-3)">SPI2 · 40 MHz</text>
+          <text x="860" y="306" font-size="10" fill="var(--ink-3)">LED (backlight) → +3V3</text>
+          <line x1="710" y1="140" x2="832" y2="140" stroke="var(--data)" stroke-width="2"/><polygon points="832,136 832,144 842,140" fill="var(--data)"/>
+          <line x1="710" y1="163" x2="832" y2="163" stroke="var(--data)" stroke-width="2"/><polygon points="832,159 832,167 842,163" fill="var(--data)"/>
+          <line x1="840" y1="186" x2="722" y2="186" stroke="var(--data)" stroke-width="2"/><polygon points="722,182 722,190 712,186" fill="var(--data)"/>
+          <line x1="710" y1="209" x2="832" y2="209" stroke="var(--data)" stroke-width="2"/><polygon points="832,205 832,213 842,209" fill="var(--data)"/>
+          <line x1="710" y1="232" x2="832" y2="232" stroke="var(--data)" stroke-width="2"/><polygon points="832,228 832,236 842,232" fill="var(--data)"/>
+          <line x1="710" y1="255" x2="832" y2="255" stroke="var(--data)" stroke-width="2"/><polygon points="832,251 832,259 842,255" fill="var(--data)"/>
+          <line x1="710" y1="278" x2="832" y2="278" stroke="var(--data)" stroke-width="2"/><polygon points="832,274 832,282 842,278" fill="var(--data)"/>
+
+          <!-- ===== RIGHT: A7670C ===== -->
+          <rect x="840" y="370" width="280" height="190" rx="7" fill="var(--surface-2)" stroke="var(--rule-2)" stroke-width="1.5"/>
+          <text x="860" y="396" font-family="Archivo, sans-serif" font-size="13.5" font-weight="600" fill="var(--ink)">A7670C · FS-MCore</text>
+          <text x="860" y="413" font-size="10.5" fill="var(--ink-3)">4G LTE Cat.1 · 2.3 A peak</text>
+          <text x="850" y="446">RX</text>
+          <text x="850" y="471">TX</text>
+          <text x="850" y="496">PWK</text>
+          <text x="850" y="521">NET</text>
+          <text x="698" y="446" text-anchor="end">GPIO5 · TX2</text>
+          <text x="698" y="471" text-anchor="end">GPIO4 · RX2</text>
+          <text x="698" y="496" text-anchor="end">GPIO6</text>
+          <text x="698" y="521" text-anchor="end">GPIO7</text>
+          <text x="775" y="434" text-anchor="middle" font-size="10" fill="var(--ink-3)">UART2 · 115 200</text>
+          <text x="860" y="546" font-size="10" fill="var(--ink-3)">VIN straight from the buck — never the ESP32</text>
+          <line x1="710" y1="442" x2="832" y2="442" stroke="var(--data)" stroke-width="2"/><polygon points="832,438 832,446 842,442" fill="var(--data)"/>
+          <line x1="840" y1="467" x2="722" y2="467" stroke="var(--data)" stroke-width="2"/><polygon points="722,463 722,471 712,467" fill="var(--data)"/>
+          <line x1="710" y1="492" x2="832" y2="492" stroke="var(--out)" stroke-width="2"/><polygon points="832,488 832,496 842,492" fill="var(--out)"/>
+          <line x1="840" y1="517" x2="722" y2="517" stroke="var(--in)" stroke-width="2"/><polygon points="722,513 722,521 712,517" fill="var(--in)"/>
+
+          <!-- ===== RIGHT: relay ===== -->
+          <rect x="840" y="610" width="280" height="140" rx="7" fill="var(--surface-2)" stroke="var(--rule-2)" stroke-width="1.5"/>
+          <text x="860" y="636" font-family="Archivo, sans-serif" font-size="13.5" font-weight="600" fill="var(--ink)">Relay Module</text>
+          <text x="860" y="653" font-size="10.5" fill="var(--ink-3)">1-ch optocoupled · drives the lock</text>
+          <text x="850" y="694">IN</text>
+          <text x="698" y="694" text-anchor="end">GPIO40</text>
+          <text x="775" y="682" text-anchor="middle" font-size="10" fill="var(--ink-3)">active LOW</text>
+          <line x1="710" y1="690" x2="832" y2="690" stroke="var(--out)" stroke-width="2"/><polygon points="832,686 832,694 842,690" fill="var(--out)"/>
+          <text x="860" y="726" font-size="10" fill="var(--ink-3)">contacts + solenoid → section 03</text>
+        </g>
+      </svg>
+    </div>
+    <div class="legend">
+      <span><i class="swatch" style="border-top-color:var(--data)"></i> serial / SPI data</span>
+      <span><i class="swatch" style="border-top-color:var(--in)"></i> input to ESP32</span>
+      <span><i class="swatch" style="border-top-color:var(--out)"></i> control output</span>
+      <span><i class="swatch" style="border-top-color:var(--rule-2); border-top-style:dashed"></i> part added beyond your list</span>
+    </div>
+    <figcaption><b>Fig. 1 — Signal interconnect.</b> Arrows point in the direction data travels. Every GPIO shown is safe on the N16R8 variant: nothing here touches the pins the 16 MB flash and 8 MB octal PSRAM occupy (GPIO26–37), the native USB pins (19/20), the UART0 console (43/44) or the strapping pins (0, 3, 45, 46).</figcaption>
+  </figure>
+</section>
+
+<!-- ============ 2. POWER ============ -->
+<section>
+  <div class="sec-head"><span class="sec-num">03</span><h2>Power distribution</h2></div>
+  <p class="sec-sub">One 12 V adapter feeds two things: the lock, directly through the relay contacts, and the HW‑688 buck. Everything digital hangs off the buck's 5 V output; the ESP32's own regulator makes the 3.3 V for the sensors.</p>
+
+  <figure>
+    <div class="figbody">
+      <svg viewBox="0 0 1120 500" role="img" aria-label="Power tree: a 12 volt supply splits to the relay contacts feeding the solenoid lock, and to the HW-688 buck converter which produces a 5 volt rail for the ESP32, A7670C modem, relay coil and buzzer; the ESP32's onboard regulator then supplies 3.3 volts to the fingerprint sensor, display, reed switch and relay opto input.">
+        <g font-family="'IBM Plex Mono', monospace" font-size="10.5" fill="var(--ink-2)">
+
+          <!-- PSU -->
+          <rect x="30" y="230" width="170" height="76" rx="7" fill="var(--surface-2)" stroke="var(--rule-2)" stroke-width="1.5"/>
+          <text x="115" y="262" text-anchor="middle" font-family="Archivo, sans-serif" font-size="13.5" font-weight="600" fill="var(--ink)">12 V · 5 A PSU</text>
+          <text x="115" y="281" text-anchor="middle" font-size="10" fill="var(--ink-3)">wall adapter</text>
+
+          <!-- 12V trunk -->
+          <line x1="200" y1="268" x2="300" y2="268" stroke="var(--r12)" stroke-width="2.5"/>
+          <line x1="250" y1="268" x2="250" y2="105" stroke="var(--r12)" stroke-width="2.5"/>
+          <line x1="250" y1="105" x2="310" y2="105" stroke="var(--r12)" stroke-width="2.5"/>
+          <circle cx="250" cy="268" r="3.5" fill="var(--r12)"/>
+          <rect x="228" y="88" width="30" height="12" rx="2" fill="var(--surface)" stroke="var(--r12)" stroke-width="1.5"/>
+          <text x="243" y="82" text-anchor="middle" font-size="9.5" fill="var(--r12)">3 A fuse</text>
+
+          <!-- relay contacts -->
+          <rect x="310" y="70" width="190" height="70" rx="7" fill="var(--surface-2)" stroke="var(--rule-2)" stroke-width="1.5"/>
+          <text x="405" y="99" text-anchor="middle" font-family="Archivo, sans-serif" font-size="12.5" font-weight="600" fill="var(--ink)">Relay COM → NO</text>
+          <text x="405" y="117" text-anchor="middle" font-size="10" fill="var(--ink-3)">dry contact · 10 A rated</text>
+          <line x1="500" y1="105" x2="582" y2="105" stroke="var(--r12)" stroke-width="2.5"/>
+          <polygon points="582,101 582,109 592,105" fill="var(--r12)"/>
+          <rect x="592" y="70" width="200" height="70" rx="7" fill="var(--surface-2)" stroke="var(--rule-2)" stroke-width="1.5"/>
+          <text x="692" y="99" text-anchor="middle" font-family="Archivo, sans-serif" font-size="12.5" font-weight="600" fill="var(--ink)">12 V Solenoid Lock</text>
+          <text x="692" y="117" text-anchor="middle" font-size="10" fill="var(--r12)">0.6–1.5 A while unlocking</text>
+
+          <!-- buck -->
+          <rect x="300" y="228" width="200" height="80" rx="7" fill="var(--surface-2)" stroke="var(--rule-2)" stroke-width="1.5"/>
+          <text x="400" y="260" text-anchor="middle" font-family="Archivo, sans-serif" font-size="13" font-weight="600" fill="var(--ink)">HW-688 buck</text>
+          <text x="400" y="278" text-anchor="middle" font-size="10" fill="var(--ink-3)">12 V → 5 V · 6 A</text>
+          <text x="400" y="294" text-anchor="middle" font-size="9.5" fill="var(--ink-3)">set output to 5.0 V first</text>
+          <text x="225" y="290" text-anchor="middle" font-size="9.5" fill="var(--r12)">12 V · ≈3 A</text>
+
+          <!-- 5V bus -->
+          <line x1="500" y1="268" x2="545" y2="268" stroke="var(--r5)" stroke-width="2.5"/>
+          <line x1="545" y1="200" x2="545" y2="400" stroke="var(--r5)" stroke-width="2.5"/>
+          <circle cx="545" cy="268" r="3.5" fill="var(--r5)"/>
+          <text x="538" y="192" text-anchor="end" font-size="10" fill="var(--r5)">5 V rail · 2.6 A peak</text>
+          <line x1="545" y1="200" x2="582" y2="200" stroke="var(--r5)" stroke-width="2.5"/><polygon points="582,196 582,204 592,200" fill="var(--r5)"/>
+          <line x1="545" y1="262" x2="582" y2="262" stroke="var(--r5)" stroke-width="2.5"/><polygon points="582,258 582,266 592,262" fill="var(--r5)"/>
+          <line x1="545" y1="330" x2="582" y2="330" stroke="var(--r5)" stroke-width="2.5"/><polygon points="582,326 582,334 592,330" fill="var(--r5)"/>
+          <line x1="545" y1="400" x2="582" y2="400" stroke="var(--r5)" stroke-width="2.5"/><polygon points="582,396 582,404 592,400" fill="var(--r5)"/>
+
+          <rect x="592" y="175" width="210" height="50" rx="6" fill="var(--surface-2)" stroke="var(--rule-2)" stroke-width="1.5"/>
+          <text x="606" y="196" font-size="11.5" font-weight="500" fill="var(--ink)">ESP32-S3 · 5V pin</text>
+          <text x="606" y="212" font-size="9.5" fill="var(--ink-3)">250 mA avg · 500 mA Wi-Fi peak</text>
+
+          <rect x="592" y="237" width="210" height="50" rx="6" fill="var(--surface-2)" stroke="var(--rule-2)" stroke-width="1.5"/>
+          <text x="606" y="258" font-size="11.5" font-weight="500" fill="var(--ink)">A7670C VIN + 1000 µF</text>
+          <text x="606" y="274" font-size="9.5" fill="var(--r5)">2.3 A bursts — own thick wire</text>
+
+          <rect x="592" y="305" width="210" height="50" rx="6" fill="var(--surface-2)" stroke="var(--rule-2)" stroke-width="1.5"/>
+          <text x="606" y="326" font-size="11.5" font-weight="500" fill="var(--ink)">Relay JD-VCC (coil)</text>
+          <text x="606" y="342" font-size="9.5" fill="var(--ink-3)">70 mA when energised</text>
+
+          <rect x="592" y="375" width="210" height="50" rx="6" fill="var(--surface-2)" stroke="var(--rule-2)" stroke-width="1.5"/>
+          <text x="606" y="396" font-size="11.5" font-weight="500" fill="var(--ink)">Buzzer +</text>
+          <text x="606" y="412" font-size="9.5" fill="var(--ink-3)">30 mA · switched by Q2</text>
+
+          <!-- 3V3 branch -->
+          <line x1="802" y1="200" x2="846" y2="200" stroke="var(--r33)" stroke-width="2.5"/>
+          <line x1="846" y1="200" x2="846" y2="288" stroke="var(--r33)" stroke-width="2.5"/>
+          <line x1="846" y1="288" x2="870" y2="288" stroke="var(--r33)" stroke-width="2.5"/>
+          <polygon points="870,284 870,292 880,288" fill="var(--r33)"/>
+
+          <rect x="880" y="185" width="210" height="205" rx="7" fill="var(--surface-2)" stroke="var(--rule-2)" stroke-width="1.5"/>
+          <text x="896" y="211" font-family="Archivo, sans-serif" font-size="12.5" font-weight="600" fill="var(--ink)">3.3 V loads</text>
+          <text x="896" y="228" font-size="9.5" fill="var(--r33)">ESP32 on-board LDO · ≈120 mA</text>
+          <text x="896" y="254" font-size="11">R503 VCC + 3.3VT</text>
+          <text x="896" y="276" font-size="11">ILI9341 VCC + LED</text>
+          <text x="896" y="298" font-size="11">KY-025 +</text>
+          <text x="896" y="320" font-size="11">Relay VCC (opto side)</text>
+          <line x1="896" y1="338" x2="1074" y2="338" stroke="var(--rule-2)" stroke-width="1"/>
+          <text x="896" y="357" font-size="10" fill="var(--ink-3)">LDO rated 1 A — plenty of margin</text>
+          <text x="896" y="375" font-size="10" fill="var(--crit)">never 5 V on the R503</text>
+
+          <!-- ground note -->
+          <line x1="500" y1="442" x2="560" y2="442" stroke="var(--gnd)" stroke-width="2.5"/>
+          <line x1="516" y1="450" x2="544" y2="450" stroke="var(--gnd)" stroke-width="2.5"/>
+          <line x1="524" y1="458" x2="536" y2="458" stroke="var(--gnd)" stroke-width="2.5"/>
+          <line x1="530" y1="420" x2="530" y2="442" stroke="var(--gnd)" stroke-width="2.5"/>
+          <text x="490" y="446" text-anchor="end" font-size="10.5" fill="var(--gnd)">star ground</text>
+          <text x="560" y="480" text-anchor="middle" font-size="10.5" fill="var(--ink-2)">Every ground returns to the HW-688 output terminal — one star point, no daisy-chaining the modem's ground through the ESP32.</text>
+        </g>
+      </svg>
+    </div>
+    <figcaption><b>Fig. 2 — Power tree.</b> The modem is the reason this diagram matters. A7670C transmit bursts pull well over 2 A for a few hundred microseconds at a time; if that current has to travel through the ESP32's 5 V pin and its ground pin, the resulting rail sag reboots the ESP32 mid‑scan. Give the modem its own pair of wires from the buck's terminal block and a 1000 µF electrolytic right at its VIN.</figcaption>
+  </figure>
+
+  <div class="tablewrap">
+    <table>
+      <thead><tr><th>Rail</th><th>Source</th><th>Typical</th><th>Peak</th><th>Headroom</th></tr></thead>
+      <tbody>
+        <tr><td><span class="rail rail-12">12 V</span></td><td>Wall adapter</td><td class="num">≈0.4 A idle</td><td class="num">≈2.5 A unlocking</td><td>5 A adapter → comfortable. 3 A is the minimum.</td></tr>
+        <tr><td><span class="rail rail-5">5 V</span></td><td>HW-688 buck</td><td class="num">≈0.65 A</td><td class="num">≈2.6 A</td><td>6 A module → large margin, will barely warm.</td></tr>
+        <tr><td><span class="rail rail-33">3V3</span></td><td>ESP32 on-board LDO</td><td class="num">≈120 mA</td><td class="num">≈160 mA</td><td>1 A LDO → fine. Do not add more 3.3 V loads than these four.</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<!-- ============ 3. LOCK DRIVE ============ -->
+<section>
+  <div class="sec-head"><span class="sec-num">04</span><h2>Lock drive stage</h2></div>
+  <p class="sec-sub">The one part of the build where a wiring mistake costs you a board. Two details do all the work: the jumper comes off so the 3.3 V logic drives the optocoupler properly, and the pull‑up keeps the door shut through boot and reset.</p>
+
+  <figure>
+    <div class="figbody">
+      <svg viewBox="0 0 1000 430" role="img" aria-label="Relay and lock detail: GPIO40 drives the relay module's IN pin with a 10k pull-up to 3.3 volts; the module's VCC-to-JD-VCC jumper is removed so VCC takes 3.3 volts and JD-VCC takes 5 volts; the COM contact carries fused 12 volts and the NO contact feeds the solenoid, which has a 1N4007 flyback diode across it.">
+        <g font-family="'IBM Plex Mono', monospace" font-size="11" fill="var(--ink-2)">
+
+          <!-- GPIO stub + pull-up -->
+          <line x1="118" y1="70" x2="238" y2="70" stroke="var(--r33)" stroke-width="2.5"/>
+          <text x="118" y="60" font-size="10.5" fill="var(--r33)">+3V3</text>
+          <line x1="150" y1="70" x2="150" y2="118" stroke="var(--r33)" stroke-width="2"/>
+          <rect x="141" y="118" width="18" height="46" rx="2" fill="var(--surface)" stroke="var(--r33)" stroke-width="2"/>
+          <line x1="150" y1="164" x2="150" y2="212" stroke="var(--r33)" stroke-width="2"/>
+          <text x="132" y="137" text-anchor="end" font-size="10.5" fill="var(--r33)">10 kΩ</text>
+          <text x="132" y="152" text-anchor="end" font-size="9.5" fill="var(--ink-3)">pull-up</text>
+
+          <text x="30" y="207" font-size="11.5" fill="var(--ink)">GPIO40</text>
+          <line x1="88" y1="212" x2="242" y2="212" stroke="var(--out)" stroke-width="2"/>
+          <polygon points="242,208 242,216 252,212" fill="var(--out)"/>
+          <circle cx="150" cy="212" r="3.5" fill="var(--out)"/>
+          <text x="88" y="234" font-size="9.5" fill="var(--ink-3)">HIGH through reset —</text>
+          <text x="88" y="247" font-size="9.5" fill="var(--ink-3)">the lock stays shut</text>
+
+          <!-- relay module -->
+          <rect x="252" y="90" width="300" height="250" rx="7" fill="var(--surface-2)" stroke="var(--ink)" stroke-width="1.8"/>
+          <text x="402" y="118" text-anchor="middle" font-family="Archivo, sans-serif" font-size="13.5" font-weight="600" fill="var(--ink)">1-ch Relay · optocoupled</text>
+          <line x1="420" y1="130" x2="420" y2="308" stroke="var(--rule-2)" stroke-width="1.5" stroke-dasharray="5 4"/>
+          <text x="420" y="326" text-anchor="middle" font-size="9.5" fill="var(--ink-3)">opto barrier</text>
+
+          <text x="264" y="166">VCC</text><text x="410" y="166" text-anchor="end" font-size="9.5" fill="var(--r33)">3V3 · opto LED</text>
+          <text x="264" y="216">IN</text><text x="410" y="216" text-anchor="end" font-size="9.5" fill="var(--ink-3)">LOW = energise</text>
+          <text x="264" y="266">GND</text>
+          <text x="540" y="152" text-anchor="end">JD-VCC</text>
+          <text x="540" y="212" text-anchor="end">COM</text>
+          <text x="540" y="252" text-anchor="end">NO</text>
+          <text x="540" y="292" text-anchor="end" fill="var(--ink-3)">NC · unused</text>
+
+          <!-- jumper removed -->
+          <rect x="300" y="128" width="94" height="22" rx="4" fill="var(--surface)" stroke="var(--crit)" stroke-width="1.4" stroke-dasharray="4 3"/>
+          <text x="347" y="143" text-anchor="middle" font-size="9.5" fill="var(--crit)">jumper OFF</text>
+
+          <!-- 3v3 into VCC -->
+          <line x1="210" y1="70" x2="210" y2="162" stroke="var(--r33)" stroke-width="2"/>
+          <line x1="210" y1="162" x2="242" y2="162" stroke="var(--r33)" stroke-width="2"/>
+          <polygon points="242,158 242,166 252,162" fill="var(--r33)"/>
+          <circle cx="210" cy="70" r="3.5" fill="var(--r33)"/>
+
+          <!-- GND -->
+          <line x1="252" y1="262" x2="200" y2="262" stroke="var(--gnd)" stroke-width="2"/>
+          <line x1="200" y1="262" x2="200" y2="388" stroke="var(--gnd)" stroke-width="2"/>
+
+          <!-- JD-VCC 5V -->
+          <line x1="552" y1="148" x2="628" y2="148" stroke="var(--r5)" stroke-width="2.5"/>
+          <rect x="628" y="128" width="150" height="40" rx="6" fill="var(--surface-2)" stroke="var(--rule-2)" stroke-width="1.5"/>
+          <text x="703" y="153" text-anchor="middle" font-size="11" fill="var(--r5)">+5 V from buck</text>
+
+          <!-- COM 12V -->
+          <line x1="552" y1="208" x2="628" y2="208" stroke="var(--r12)" stroke-width="2.5"/>
+          <rect x="628" y="188" width="150" height="40" rx="6" fill="var(--surface-2)" stroke="var(--rule-2)" stroke-width="1.5"/>
+          <text x="703" y="213" text-anchor="middle" font-size="11" fill="var(--r12)">+12 V (fused)</text>
+
+          <!-- NO -> solenoid -->
+          <line x1="552" y1="248" x2="622" y2="248" stroke="var(--r12)" stroke-width="2.5"/>
+          <line x1="622" y1="248" x2="622" y2="290" stroke="var(--r12)" stroke-width="2.5"/>
+          <line x1="622" y1="290" x2="662" y2="290" stroke="var(--r12)" stroke-width="2.5"/>
+          <rect x="662" y="266" width="180" height="48" rx="6" fill="var(--surface-2)" stroke="var(--rule-2)" stroke-width="1.5"/>
+          <text x="752" y="288" text-anchor="middle" font-size="11.5" font-weight="500" fill="var(--ink)">12 V solenoid</text>
+          <text x="752" y="304" text-anchor="middle" font-size="9.5" fill="var(--ink-3)">fail-secure · 5 s max ON</text>
+          <line x1="842" y1="290" x2="900" y2="290" stroke="var(--gnd)" stroke-width="2"/>
+          <line x1="900" y1="290" x2="900" y2="388" stroke="var(--gnd)" stroke-width="2"/>
+
+          <!-- flyback diode -->
+          <line x1="640" y1="290" x2="640" y2="352" stroke="var(--crit)" stroke-width="2"/>
+          <line x1="640" y1="352" x2="870" y2="352" stroke="var(--crit)" stroke-width="2"/>
+          <line x1="870" y1="352" x2="870" y2="290" stroke="var(--crit)" stroke-width="2"/>
+          <circle cx="640" cy="290" r="3.5" fill="var(--crit)"/>
+          <circle cx="870" cy="290" r="3.5" fill="var(--crit)"/>
+          <polygon points="774,342 774,362 756,352" fill="var(--crit)"/>
+          <line x1="753" y1="341" x2="753" y2="363" stroke="var(--crit)" stroke-width="2.5"/>
+          <text x="760" y="378" text-anchor="middle" font-size="10" fill="var(--crit)">1N4007 · cathode to the +12 V side</text>
+
+          <!-- ground rail -->
+          <line x1="160" y1="388" x2="940" y2="388" stroke="var(--gnd)" stroke-width="2.5"/>
+          <text x="160" y="408" font-size="10" fill="var(--gnd)">GND — star point at the buck output terminal</text>
+        </g>
+      </svg>
+    </div>
+    <figcaption><b>Fig. 3 — Relay and solenoid.</b> Removing the VCC↔JD‑VCC jumper splits the module into a 3.3 V input side, which the ESP32 can drive cleanly, and a 5 V coil side. Left jumpered at 5 V the optocoupler LED is marginal at 3.3 V and the relay chatters. The 10 kΩ pull‑up matters just as much: without it the IN pin floats for the ~50 ms between reset and firmware start, and the door pops open every time the unit reboots.</figcaption>
+  </figure>
+
+  <div class="callout">
+    <p><strong>Fail‑secure vs fail‑safe.</strong> A fail‑secure solenoid stays locked with no power and only draws current while the relay is closed — that is the wiring drawn above and the right default for a gym. A fail‑safe lock is the opposite: it is energised continuously to stay unlocked, drops open on power loss, and would keep 12 V flowing through your relay contacts 24/7. Check which one you bought before you power it up; if it is fail‑safe, invert the relay logic in firmware and size the adapter for continuous draw.</p>
+  </div>
+</section>
+
+<!-- ============ 4. MODULE TABLES ============ -->
+<section>
+  <div class="sec-head"><span class="sec-num">05</span><h2>Connection tables</h2></div>
+  <p class="sec-sub">Wire from these, not from the picture. Every row is one physical wire.</p>
+
+  <div class="cards">
+
+    <div class="card">
+      <div class="card-head"><div class="kicker">Module 02</div><h3>R503 Fingerprint</h3></div>
+      <table>
+        <thead><tr><th>R503 pin</th><th>Wire</th><th>Goes to</th></tr></thead>
+        <tbody>
+          <tr><td>1 · VCC</td><td class="muted">red</td><td><code>3V3</code></td></tr>
+          <tr><td>2 · GND</td><td class="muted">black</td><td><code>GND</code></td></tr>
+          <tr><td>3 · TXD</td><td class="muted">yellow</td><td><code>GPIO18</code></td></tr>
+          <tr><td>4 · RXD</td><td class="muted">green</td><td><code>GPIO17</code></td></tr>
+          <tr><td>5 · WAKEUP</td><td class="muted">blue</td><td><code>GPIO16</code></td></tr>
+          <tr><td>6 · 3.3VT</td><td class="muted">white</td><td><code>3V3</code></td></tr>
+        </tbody>
+      </table>
+      <div class="card-note"><strong>3.3 V only</strong> — 5 V on pin 1 destroys the sensor. Default baud 57 600 8N1. WAKEUP goes active when a finger touches the ring, so the firmware can sit in a light sleep and wake on interrupt instead of polling. Wire colours vary between batches: confirm against pin 1 on your connector, not the colour.</div>
+    </div>
+
+    <div class="card">
+      <div class="card-head"><div class="kicker">Module 07</div><h3>ILI9341 TFT · MD0671</h3></div>
+      <table>
+        <thead><tr><th>Display pin</th><th>Goes to</th></tr></thead>
+        <tbody>
+          <tr><td>VCC</td><td><code>3V3</code></td></tr>
+          <tr><td>GND</td><td><code>GND</code></td></tr>
+          <tr><td>CS</td><td><code>GPIO10</code></td></tr>
+          <tr><td>RESET</td><td><code>GPIO14</code></td></tr>
+          <tr><td>DC / RS</td><td><code>GPIO9</code></td></tr>
+          <tr><td>SDI / MOSI</td><td><code>GPIO11</code></td></tr>
+          <tr><td>SCK</td><td><code>GPIO12</code></td></tr>
+          <tr><td>LED</td><td><code>3V3</code> <span class="muted">(always on)</span></td></tr>
+          <tr><td>SDO / MISO</td><td><code>GPIO13</code></td></tr>
+          <tr><td>SD_CS</td><td><code>GPIO47</code></td></tr>
+          <tr><td>SD_MOSI / SCK / MISO</td><td class="muted">tie to the same GPIO11 / 12 / 13</td></tr>
+        </tbody>
+      </table>
+      <div class="card-note">Run the whole board at 3.3 V — these modules have no level shifters, and 5 V on the logic pins is what kills them. For a dimmable backlight, drive LED through a PNP or P‑MOSFET from 3V3 with the gate on <code>GPIO21</code>; do not drive it straight from a GPIO, it draws far more than a pin can source.</div>
+    </div>
+
+    <div class="card">
+      <div class="card-head"><div class="kicker">Module 03</div><h3>A7670C · FS-MCore</h3></div>
+      <table>
+        <thead><tr><th>Board pin</th><th>Goes to</th></tr></thead>
+        <tbody>
+          <tr><td>VIN</td><td><code>5V</code> from the buck</td></tr>
+          <tr><td>GND</td><td><code>GND</code> at the buck terminal</td></tr>
+          <tr><td>TX</td><td><code>GPIO4</code></td></tr>
+          <tr><td>RX</td><td><code>GPIO5</code></td></tr>
+          <tr><td>PWK</td><td><code>GPIO6</code> via NPN, or a jumper</td></tr>
+          <tr><td>NET</td><td><code>GPIO7</code> <span class="muted">(optional)</span></td></tr>
+          <tr><td>PEN</td><td class="muted">leave open</td></tr>
+        </tbody>
+      </table>
+      <div class="card-note">Power‑on sequence: pull <code>PWK</code> low for ~1 s, release, then wait ~5 s before the first AT command. Cleanest way is an NPN (2N3904, 1 kΩ on the base) pulling PWK to GND, so the ESP32 never has to source into the modem's rail. This board has on‑board level translation, so TX/RX go straight to the ESP32 — but check your silkscreen for a <code>VDD</code>/<code>VREF</code> pin; if there is one, tie it to 3V3.</div>
+    </div>
+
+    <div class="card">
+      <div class="card-head"><div class="kicker">Modules 05 + 04</div><h3>Relay + Solenoid Lock</h3></div>
+      <table>
+        <thead><tr><th>Relay pin</th><th>Goes to</th></tr></thead>
+        <tbody>
+          <tr><td>VCC</td><td><code>3V3</code></td></tr>
+          <tr><td>GND</td><td><code>GND</code></td></tr>
+          <tr><td>IN</td><td><code>GPIO40</code> + 10 kΩ to 3V3</td></tr>
+          <tr><td>JD-VCC</td><td><code>5V</code></td></tr>
+          <tr><td class="muted">VCC↔JD-VCC jumper</td><td class="muted">removed</td></tr>
+          <tr><td>COM</td><td><code>+12 V</code> after the fuse</td></tr>
+          <tr><td>NO</td><td>solenoid +</td></tr>
+          <tr><td>NC</td><td class="muted">unused</td></tr>
+        </tbody>
+      </table>
+      <div class="card-note">Solenoid − goes to 12 V ground, with a 1N4007 across the coil, cathode to the + side. Keep the unlock pulse to 3–5 s in firmware — most 12 V solenoids are rated for intermittent duty and will cook if held.</div>
+    </div>
+
+    <div class="card">
+      <div class="card-head"><div class="kicker">Module 06</div><h3>KY-025 Reed Switch</h3></div>
+      <table>
+        <thead><tr><th>KY-025 pin</th><th>Goes to</th></tr></thead>
+        <tbody>
+          <tr><td>+ / VCC</td><td><code>3V3</code></td></tr>
+          <tr><td>G / GND</td><td><code>GND</code></td></tr>
+          <tr><td>D0</td><td><code>GPIO41</code></td></tr>
+          <tr><td>A0</td><td class="muted">unused</td></tr>
+        </tbody>
+      </table>
+      <div class="card-note">Power it from 3.3 V, not 5 V — the LM393 comparator works down to 3 V, and this keeps D0 at a level the ESP32 can read safely. At 5 V you would need a divider. Set the trim pot with the magnet in the closed‑door position. Sensor on the frame, magnet on the door leaf.</div>
+    </div>
+
+    <div class="card">
+      <div class="card-head"><div class="kicker">Added parts</div><h3>Exit Button + Buzzer</h3></div>
+      <table>
+        <thead><tr><th>Part</th><th>Wiring</th></tr></thead>
+        <tbody>
+          <tr><td>Exit button</td><td><code>GPIO39</code> → switch → <code>GND</code>, <code>INPUT_PULLUP</code>, 100 nF across the switch</td></tr>
+          <tr><td>Buzzer +</td><td><code>5V</code></td></tr>
+          <tr><td>Buzzer −</td><td>collector of Q2 (2N3904)</td></tr>
+          <tr><td>Q2 base</td><td><code>GPIO42</code> via 1 kΩ</td></tr>
+          <tr><td>Q2 emitter</td><td><code>GND</code></td></tr>
+        </tbody>
+      </table>
+      <div class="card-note">An active 5 V buzzer only needs a level on the pin — no tone generation. If you buy a passive one, drive Q2 from an LEDC PWM channel instead. Run the exit button on its own twisted pair if the cable run is over a metre.</div>
+    </div>
+
+  </div>
+</section>
+
+<!-- ============ 5. PIN MAP ============ -->
+<section>
+  <div class="sec-head"><span class="sec-num">06</span><h2>Firmware pin map</h2></div>
+  <p class="sec-sub">Paste this into a <code>pins.h</code> and you are done arguing with the pinout.</p>
+
+  <div class="tablewrap">
+    <table>
+      <thead><tr><th>GPIO</th><th>Signal</th><th>Direction</th><th>Peripheral</th><th>Notes</th></tr></thead>
+      <tbody>
+        <tr><td><code>4</code></td><td>MODEM_RX</td><td>in</td><td>UART2</td><td>from A7670C TX</td></tr>
+        <tr><td><code>5</code></td><td>MODEM_TX</td><td>out</td><td>UART2</td><td>to A7670C RX</td></tr>
+        <tr><td><code>6</code></td><td>MODEM_PWRKEY</td><td>out</td><td>GPIO</td><td>via NPN, 1 s low pulse</td></tr>
+        <tr><td><code>7</code></td><td>MODEM_NET</td><td>in</td><td>GPIO</td><td>network status, optional</td></tr>
+        <tr><td><code>9</code></td><td>TFT_DC</td><td>out</td><td>GPIO</td><td>data / command select</td></tr>
+        <tr><td><code>10</code></td><td>TFT_CS</td><td>out</td><td>SPI2</td><td>display chip select</td></tr>
+        <tr><td><code>11</code></td><td>SPI_MOSI</td><td>out</td><td>SPI2</td><td>shared: display + SD</td></tr>
+        <tr><td><code>12</code></td><td>SPI_SCK</td><td>out</td><td>SPI2</td><td>shared: display + SD</td></tr>
+        <tr><td><code>13</code></td><td>SPI_MISO</td><td>in</td><td>SPI2</td><td>SD card reads</td></tr>
+        <tr><td><code>14</code></td><td>TFT_RST</td><td>out</td><td>GPIO</td><td>display reset</td></tr>
+        <tr><td><code>16</code></td><td>FP_TOUCH</td><td>in</td><td>GPIO / IRQ</td><td>R503 WAKEUP</td></tr>
+        <tr><td><code>17</code></td><td>FP_TX</td><td>out</td><td>UART1</td><td>to R503 RXD</td></tr>
+        <tr><td><code>18</code></td><td>FP_RX</td><td>in</td><td>UART1</td><td>from R503 TXD</td></tr>
+        <tr><td><code>21</code></td><td>TFT_BL</td><td>out</td><td>LEDC</td><td>reserved — only if you fit the backlight driver</td></tr>
+        <tr><td><code>39</code></td><td>EXIT_BTN</td><td>in</td><td>GPIO</td><td><code>INPUT_PULLUP</code>, active low</td></tr>
+        <tr><td><code>40</code></td><td>LOCK_RELAY</td><td>out</td><td>GPIO</td><td>active low, external 10 k pull-up</td></tr>
+        <tr><td><code>41</code></td><td>DOOR_SENSE</td><td>in</td><td>GPIO</td><td>KY-025 D0</td></tr>
+        <tr><td><code>42</code></td><td>BUZZER</td><td>out</td><td>GPIO / LEDC</td><td>via 2N3904</td></tr>
+        <tr><td><code>47</code></td><td>SD_CS</td><td>out</td><td>SPI2</td><td>microSD chip select</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p style="margin-top:22px"><strong>Pins deliberately left alone on the N16R8:</strong> <code>26–37</code> are wired to the 16 MB flash and 8 MB octal PSRAM and will brick the boot if you touch them. <code>19/20</code> are the native USB D−/D+. <code>43/44</code> are the UART0 console you will be watching logs on. <code>0, 3, 45, 46</code> are strapping pins that decide boot mode. <code>38</code> and <code>48</code> carry the board's RGB LED depending on your revision.</p>
+</section>
+
+<!-- ============ 6. NOTES ============ -->
+<section>
+  <div class="sec-head"><span class="sec-num">07</span><h2>Before you power it up</h2></div>
+  <p class="sec-sub">Ordered roughly by how expensive the mistake is.</p>
+
+  <div class="notes">
+    <div class="note crit">
+      <h4><span class="tag">Kills hardware</span>Set the buck output before connecting anything</h4>
+      <p>Wire the HW‑688 to 12 V with nothing on its output, meter the output terminals, adjust to 5.0 V, then power down and connect the loads. Some of these modules ship set near their input voltage — connecting the ESP32 first is a very short experiment.</p>
+    </div>
+    <div class="note crit">
+      <h4><span class="tag">Kills hardware</span>USB and 12 V at the same time</h4>
+      <p>On the DevKitC‑1 the USB VBUS and the 5V header pin sit on the same net with no ORing diode. While flashing over USB, disconnect the 12 V supply — or fit a Schottky (SS34) in the buck's 5 V line so the two sources cannot fight.</p>
+    </div>
+    <div class="note warn">
+      <h4><span class="tag">Resets mid-scan</span>Modem inrush</h4>
+      <p>The 1000 µF at the A7670C VIN plus a 100 nF ceramic beside it is not optional in practice. Without it, an LTE transmit burst drags the shared 5 V rail down far enough to brown out the ESP32, and it shows up as random reboots that look like a firmware bug for about two days.</p>
+    </div>
+    <div class="note warn">
+      <h4><span class="tag">Opens the door</span>Relay state at boot</h4>
+      <p>Fit the 10 kΩ pull‑up on <code>GPIO40</code> and set the pin HIGH with <code>pinMode</code>/<code>digitalWrite</code> as the very first lines in <code>setup()</code>, before Wi‑Fi, display or anything else. Confirm on the bench that a reset does not click the relay.</p>
+    </div>
+    <div class="note warn">
+      <h4><span class="tag">Contact wear</span>Flyback diode across the solenoid</h4>
+      <p>Switching an inductive 12 V load with no diode arcs the relay contacts and radiates enough noise to corrupt the SPI display. A 1N4007 costs almost nothing and is the difference between a relay that lasts years and one that welds shut. Mount it at the lock, not at the relay.</p>
+    </div>
+    <div class="note">
+      <h4><span class="tag">Wiring</span>Separate the lock cable from the signal cable</h4>
+      <p>Run the 12 V lock pair in its own sleeve, away from the R503 and display ribbons. Keep the fingerprint cable under 30 cm if you can; if the sensor has to sit further out, drop the UART to 9600 baud rather than fighting the noise.</p>
+    </div>
+    <div class="note">
+      <h4><span class="tag">Antenna</span>Give the A7670C room</h4>
+      <p>Mount the LTE antenna outside the metal enclosure and keep it away from the buck's inductor and the solenoid wiring. Insert the SIM before power‑up — the module will not detect a hot‑swapped card.</p>
+    </div>
+    <div class="note ok">
+      <h4><span class="tag">Bring-up order</span>Test one module at a time</h4>
+      <p>Buck → ESP32 alone → display → R503 → relay with no lock attached (listen for the click) → lock → modem last. Each step is a few minutes; debugging all seven at once is not.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 7. EXTRAS ============ -->
+<section>
+  <div class="sec-head"><span class="sec-num">08</span><h2>Bill of materials</h2></div>
+  <p class="sec-sub">Every reference designator on the schematic sheet, in one list. The modules you already own are at the top; everything below the rule is what has to be added to make the sheet buildable.</p>
+
+  <div class="tablewrap">
+    <table>
+      <thead><tr><th>Ref</th><th>Part</th><th>Value / type</th><th>Qty</th><th>Purpose</th></tr></thead>
+      <tbody>
+        <tr><td><code>U2</code></td><td>ESP32-S3 DevKitC-1</td><td>N16R8</td><td class="num">1</td><td>Controller</td></tr>
+        <tr><td><code>U1</code></td><td>HW-688 buck module</td><td>12–24 V → 5 V, 6 A</td><td class="num">1</td><td>5 V rail</td></tr>
+        <tr><td><code>J2</code></td><td>R503 fingerprint sensor</td><td>capacitive, RGB ring</td><td class="num">1</td><td>Biometric read</td></tr>
+        <tr><td><code>J3</code></td><td>ILI9341 TFT + SD</td><td>MD0671, 2.4″ 240×320</td><td class="num">1</td><td>User display</td></tr>
+        <tr><td><code>J4</code></td><td>A7670C modem</td><td>FS-MCore LTE Cat.1</td><td class="num">1</td><td>4G uplink</td></tr>
+        <tr><td><code>J5</code></td><td>KY-025 reed module</td><td>reed + LM393</td><td class="num">1</td><td>Door open sense</td></tr>
+        <tr><td><code>K1</code></td><td>Relay module</td><td>1-ch, 5 V coil, optocoupled</td><td class="num">1</td><td>Lock switching</td></tr>
+        <tr><td><code>L1</code></td><td>Solenoid door lock</td><td>12 V, fail-secure</td><td class="num">1</td><td>The lock</td></tr>
+        <tr><td colspan="5" style="background:var(--surface-2); font-family:'IBM Plex Mono',monospace; font-size:10.5px; letter-spacing:.09em; text-transform:uppercase; color:var(--ink-3)">Added to make the circuit work</td></tr>
+        <tr><td><code>J1</code></td><td>DC barrel jack + 12 V adapter</td><td>12 V, 5 A</td><td class="num">1</td><td>Supply</td></tr>
+        <tr><td><code>F1</code></td><td>Fuse + holder</td><td>3 A slow-blow</td><td class="num">1</td><td>A shorted lock cable otherwise takes the adapter with it</td></tr>
+        <tr><td><code>C1</code></td><td>Electrolytic</td><td>470 µF / 25 V</td><td class="num">1</td><td>12 V input bulk</td></tr>
+        <tr><td><code>C2</code></td><td>Electrolytic</td><td>1000 µF / 10 V</td><td class="num">1</td><td>5 V rail bulk at the buck output</td></tr>
+        <tr><td><code>C7</code></td><td>Electrolytic</td><td>1000 µF / 10 V</td><td class="num">1</td><td>At J4 VIN — absorbs the 2.3 A LTE bursts</td></tr>
+        <tr><td><code>C3–C6, C8, C9</code></td><td>Ceramic</td><td>100 nF / 50 V</td><td class="num">6</td><td>Local decoupling + switch debounce</td></tr>
+        <tr><td><code>R1, R3</code></td><td>Resistor</td><td>1 kΩ ¼ W</td><td class="num">2</td><td>Transistor base current limit</td></tr>
+        <tr><td><code>R2</code></td><td>Resistor</td><td>10 kΩ ¼ W</td><td class="num">1</td><td>Holds LOCK_IN high through reset — the lock stays shut</td></tr>
+        <tr><td><code>Q1, Q2</code></td><td>NPN transistor</td><td>2N3904 (or BC547)</td><td class="num">2</td><td>Modem PWRKEY pull-down; buzzer low-side drive</td></tr>
+        <tr><td><code>D1</code></td><td>Rectifier diode</td><td>1N4007</td><td class="num">1</td><td>Solenoid flyback clamp — protects the relay contacts</td></tr>
+        <tr><td><code>SW1</code></td><td>Momentary push button</td><td>NO, panel mount</td><td class="num">1</td><td>Exit from inside without a fingerprint</td></tr>
+        <tr><td><code>LS1</code></td><td>Active buzzer</td><td>5 V, ~30 mA</td><td class="num">1</td><td>Accept / deny feedback</td></tr>
+        <tr><td class="muted">—</td><td>Screw terminal blocks</td><td>2-way, 5 mm</td><td class="num">4</td><td>12 V in, buck output star point, lock, sensor tails</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p style="margin-top:22px"><strong>Substitutions that are fine:</strong> any 470–1000 µF electrolytic rated 16 V or more for <code>C1</code>; BC547 or S8050 for the 2N3904s; 1N4001–1N4007 for <code>D1</code>; 4.7 kΩ–10 kΩ for <code>R2</code>. <strong>Not fine:</strong> dropping <code>C7</code>, dropping <code>D1</code>, or leaving <code>R2</code> out — those three are what stop the unit rebooting mid-scan, welding the relay contacts, and opening the door on every reset.</p>
+</section>
+
+<footer>
+  <p>Rev A · drawn for the NOVA FITNESS access controller, stage 13. Verify the R503 connector orientation and the A7670C silkscreen against your own boards before applying power — module revisions differ. Datasheet references: <a href="https://download.mikroe.com/documents/datasheets/R503_datasheet.pdf">GROW R503 manual</a>, <a href="https://alphatronic.lk/product/sima7670c-fs-mcore-4g-lte-module/">SIMA7670C FS‑MCore</a>.</p>
+</footer>
+
+</div>

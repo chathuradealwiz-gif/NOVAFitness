@@ -5,6 +5,15 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { Field } from "@/components/ui";
 import { Spinner } from "@/components/Loading";
+import {
+  IconAttendance,
+  IconEdit,
+  IconFingerprint,
+  IconMeal,
+  IconPayments,
+  IconStatus,
+  IconWorkout,
+} from "@/components/icons";
 import { changeMemberStatus } from "@/lib/actions/members";
 import { recordPayment } from "@/lib/actions/payments";
 import { cancelEnrollment, removeFingerprint, requestEnrollment } from "@/lib/actions/fingerprint";
@@ -41,27 +50,34 @@ export function MemberActions({
 
       <div className="flex flex-wrap gap-2">
         <button className="nova-btn-primary" onClick={() => setPanel(panel === "payment" ? null : "payment")}>
+          <IconPayments size={16} />
           Record Payment
         </button>
         <button
           className="nova-btn-ghost"
           onClick={() => setPanel(panel === "fingerprint" ? null : "fingerprint")}
         >
+          <IconFingerprint size={16} />
           {member.fingerprint_id === null ? "Enroll Fingerprint" : "Manage Fingerprint"}
         </button>
         <button className="nova-btn-ghost" onClick={() => setPanel(panel === "status" ? null : "status")}>
+          <IconStatus size={16} />
           Change Status
         </button>
         <Link href={`/dashboard/members/${member.id}/edit`} className="nova-btn-ghost">
+          <IconEdit size={16} />
           Edit Member
         </Link>
         <Link href={`/dashboard/workouts/new?member=${member.id}`} className="nova-btn-ghost">
+          <IconWorkout size={16} />
           Assign Workout
         </Link>
         <Link href={`/dashboard/meals/new?member=${member.id}`} className="nova-btn-ghost">
+          <IconMeal size={16} />
           Assign Meal Plan
         </Link>
         <Link href={`/dashboard/attendance?member=${member.id}`} className="nova-btn-ghost">
+          <IconAttendance size={16} />
           Attendance
         </Link>
       </div>

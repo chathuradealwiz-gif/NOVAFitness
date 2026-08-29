@@ -21,3 +21,6 @@ next-env.d.ts
 firmware/.pio/
 firmware/.vscode/
 supabase/.temp/
+
+# Placeholder for production env values — never commit
+docs/Meta_env_prod.txt

@@ -2,6 +2,7 @@ import Link from "next/link";
 import { requireStaff } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
 import { EmptyState, PageHeader } from "@/components/ui";
+import { MealArt } from "@/components/illustrations";
 import { formatDate } from "@/lib/format";
 
 interface PlanRow {
@@ -30,7 +31,7 @@ export default async function MealPlansPage() {
       <PageHeader title="Meal Plans" subtitle="Assign a plan from a member's profile page." />
 
       {plans.length === 0 ? (
-        <EmptyState title="No meal plans yet" hint="Open a member and choose Assign Meal Plan." />
+        <EmptyState title="No meal plans yet" art={<MealArt />} hint="Open a member and choose Assign Meal Plan." />
       ) : (
         <div className="nova-card">
           <div className="nova-table-wrap">

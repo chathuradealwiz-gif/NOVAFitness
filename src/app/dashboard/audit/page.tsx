@@ -1,6 +1,7 @@
 import { requireSuperAdmin } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
 import { EmptyState, PageHeader } from "@/components/ui";
+import { ReceiptArt } from "@/components/illustrations";
 import { formatDateTime } from "@/lib/format";
 import type { AuditLog } from "@/types/database";
 
@@ -45,7 +46,7 @@ export default async function AuditPage({
       <section className="nova-card">
         <h2 className="mb-3 text-sm font-semibold">System changes</h2>
         {rows.length === 0 ? (
-          <EmptyState title="Nothing logged yet" />
+          <EmptyState title="Nothing logged yet" art={<ReceiptArt />} />
         ) : (
           <div className="nova-table-wrap">
             <table className="nova-table">

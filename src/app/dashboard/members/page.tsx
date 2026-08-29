@@ -1,7 +1,10 @@
 import Link from "next/link";
+import { IconPlus } from "@/components/icons";
 import { requireStaff } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
 import { EmptyState, PageHeader, StatusPill } from "@/components/ui";
+import { DumbbellArt } from "@/components/illustrations";
+import { Avatar } from "@/components/Avatar";
 import { formatDate } from "@/lib/format";
 import type { Member, MemberStatus } from "@/types/database";
 import { MemberSearch } from "./MemberSearch";
@@ -52,6 +55,7 @@ export default async function MembersPage({
         subtitle={`${total} member${total === 1 ? "" : "s"}`}
         action={
           <Link href="/dashboard/members/new" className="nova-btn-primary">
+            <IconPlus size={16} />
             Add Member
           </Link>
         }
@@ -61,6 +65,7 @@ export default async function MembersPage({
 
       {members.length === 0 ? (
         <EmptyState
+          art={<DumbbellArt />}
           title={query ? "No members match that search" : "No members yet"}
           hint={query ? "Try a member number, name, phone or fingerprint ID." : undefined}
         />
@@ -89,7 +94,17 @@ export default async function MembersPage({
                         {member.membership_id}
                       </Link>
                     </td>
-                    <td className="font-medium">{member.full_name}</td>
+                    <td>
+                      <span className="flex items-center gap-2.5">
+                        <Avatar
+                          name={member.full_name}
+                          src={member.profile_image_url}
+                          size={32}
+                          rounded="rounded-lg"
+                        />
+                        <span className="font-medium">{member.full_name}</span>
+                      </span>
+                    </td>
                     <td className="text-nova-muted">{member.phone ?? "—"}</td>
                     <td>
                       <StatusPill status={member.status} />

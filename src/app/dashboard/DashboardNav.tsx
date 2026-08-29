@@ -3,28 +3,48 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
+import type { ComponentType } from "react";
+import {
+  IconAdmins,
+  IconAttendance,
+  IconAudit,
+  IconBroadcast,
+  IconDashboard,
+  IconDevice,
+  IconFinance,
+  IconMeal,
+  IconMembers,
+  IconMore,
+  IconPay,
+  IconPayments,
+  IconSettings,
+  IconWorkout,
+  type IconProps,
+} from "@/components/icons";
 
 interface NavItem {
   href: string;
   label: string;
+  icon: ComponentType<IconProps>;
   superAdminOnly?: boolean;
   /** Shown in the 5-slot mobile bar; the rest live behind "More" (spec §55). */
   primary?: boolean;
 }
 
 const ITEMS: NavItem[] = [
-  { href: "/dashboard", label: "Dashboard", primary: true },
-  { href: "/dashboard/members", label: "Members", primary: true },
-  { href: "/dashboard/attendance", label: "Attendance", primary: true },
-  { href: "/dashboard/payments", label: "Payments", primary: true },
-  { href: "/dashboard/finance", label: "Financial Reports" },
-  { href: "/dashboard/workouts", label: "Workout Plans" },
-  { href: "/dashboard/meals", label: "Meal Plans" },
-  { href: "/dashboard/broadcasts", label: "Broadcasts" },
-  { href: "/dashboard/devices", label: "Devices" },
-  { href: "/dashboard/admins", label: "Administrators", superAdminOnly: true },
-  { href: "/dashboard/audit", label: "Audit Logs", superAdminOnly: true },
-  { href: "/dashboard/settings", label: "Gym Settings" },
+  { href: "/dashboard", label: "Dashboard", icon: IconDashboard, primary: true },
+  { href: "/dashboard/members", label: "Members", icon: IconMembers, primary: true },
+  { href: "/dashboard/pay", label: "Pay", icon: IconPay, primary: true },
+  { href: "/dashboard/attendance", label: "Attendance", icon: IconAttendance, primary: true },
+  { href: "/dashboard/payments", label: "Payments", icon: IconPayments },
+  { href: "/dashboard/finance", label: "Financial Reports", icon: IconFinance },
+  { href: "/dashboard/workouts", label: "Workout Plans", icon: IconWorkout },
+  { href: "/dashboard/meals", label: "Meal Plans", icon: IconMeal },
+  { href: "/dashboard/broadcasts", label: "Broadcasts", icon: IconBroadcast },
+  { href: "/dashboard/devices", label: "Devices", icon: IconDevice },
+  { href: "/dashboard/admins", label: "Administrators", icon: IconAdmins, superAdminOnly: true },
+  { href: "/dashboard/audit", label: "Audit Logs", icon: IconAudit, superAdminOnly: true },
+  { href: "/dashboard/settings", label: "Gym Settings", icon: IconSettings },
 ];
 
 function isActive(pathname: string, href: string) {
@@ -46,23 +66,29 @@ export function DashboardNav({
   if (variant === "sidebar") {
     return (
       <nav className="mt-8 space-y-1">
-        {items.map((item) => (
-          <Link
-            key={item.href}
-            href={item.href}
-            className={`relative block rounded-lg px-3 py-2.5 font-display text-[11px]
-              font-bold uppercase tracking-wider transition-all ${
-                isActive(pathname, item.href)
-                  ? "bg-nova-red/12 text-nova-red shadow-glowSoft"
-                  : "text-nova-muted hover:bg-white/5 hover:text-nova-text"
-              }`}
-          >
-            {isActive(pathname, item.href) && (
-              <span className="absolute inset-y-1.5 left-0 w-[3px] rounded-full bg-nova-red" />
-            )}
-            {item.label}
-          </Link>
-        ))}
+        {items.map((item) => {
+          const active = isActive(pathname, item.href);
+          const Icon = item.icon;
+
+          return (
+            <Link
+              key={item.href}
+              href={item.href}
+              className={`relative flex items-center gap-3 rounded-lg px-3 py-2.5 font-display
+                text-[11px] font-bold uppercase tracking-wider transition-all ${
+                  active
+                    ? "bg-nova-red/12 text-nova-red shadow-glowSoft"
+                    : "text-nova-muted hover:bg-white/5 hover:text-nova-text"
+                }`}
+            >
+              {active && (
+                <span className="absolute inset-y-1.5 left-0 w-[3px] rounded-full bg-nova-red" />
+              )}
+              <Icon size={18} className="shrink-0" />
+              <span className="truncate">{item.label}</span>
+            </Link>
+          );
+        })}
       </nav>
     );
   }
@@ -82,45 +108,58 @@ export function DashboardNav({
             onClick={(event) => event.stopPropagation()}
           >
             <div className="grid grid-cols-2 gap-2">
-              {secondary.map((item) => (
-                <Link
-                  key={item.href}
-                  href={item.href}
-                  onClick={() => setMoreOpen(false)}
-                  className="rounded-xl border border-nova-border px-3 py-3 text-sm font-medium"
-                >
-                  {item.label}
-                </Link>
-              ))}
+              {secondary.map((item) => {
+                const Icon = item.icon;
+                return (
+                  <Link
+                    key={item.href}
+                    href={item.href}
+                    onClick={() => setMoreOpen(false)}
+                    className="flex items-center gap-2.5 rounded-xl border border-nova-border px-3 py-3
+                      font-display text-[11px] font-bold uppercase tracking-wide text-nova-text"
+                  >
+                    <Icon size={17} className="shrink-0 text-nova-red" />
+                    <span className="truncate">{item.label}</span>
+                  </Link>
+                );
+              })}
             </div>
           </div>
         </div>
       )}
 
-      <nav className="fixed inset-x-0 bottom-0 z-40 grid grid-cols-5 border-t border-nova-border bg-nova-surface/95 backdrop-blur lg:hidden">
-        {primary.map((item) => (
-          <Link
-            key={item.href}
-            href={item.href}
-            className={`relative flex min-h-[58px] flex-col items-center justify-center px-1
-              font-display text-[10px] font-bold uppercase tracking-wide ${
-                isActive(pathname, item.href) ? "text-nova-red" : "text-nova-muted"
-              }`}
-          >
-            {isActive(pathname, item.href) && (
-              <span className="absolute inset-x-3 top-0 h-[2px] rounded-full bg-nova-red shadow-glowSoft" />
-            )}
-            {item.label}
-          </Link>
-        ))}
+      <nav className="fixed inset-x-0 bottom-0 z-40 grid grid-cols-5 border-t border-nova-border bg-nova-surface/95 pb-[env(safe-area-inset-bottom)] backdrop-blur lg:hidden">
+        {primary.map((item) => {
+          const active = isActive(pathname, item.href);
+          const Icon = item.icon;
+
+          return (
+            <Link
+              key={item.href}
+              href={item.href}
+              className={`relative flex min-h-[58px] flex-col items-center justify-center gap-1 px-1
+                font-display text-[9px] font-bold uppercase tracking-wide ${
+                  active ? "text-nova-red" : "text-nova-muted"
+                }`}
+            >
+              {active && (
+                <span className="absolute inset-x-3 top-0 h-[2px] rounded-full bg-nova-red shadow-glowSoft" />
+              )}
+              <Icon size={19} />
+              <span>{item.label}</span>
+            </Link>
+          );
+        })}
+
         <button
           onClick={() => setMoreOpen((open) => !open)}
-          className={`flex min-h-[58px] flex-col items-center justify-center font-display
-            text-[10px] font-bold uppercase tracking-wide ${
+          className={`flex min-h-[58px] flex-col items-center justify-center gap-1 font-display
+            text-[9px] font-bold uppercase tracking-wide ${
               moreOpen ? "text-nova-red" : "text-nova-muted"
             }`}
         >
-          More
+          <IconMore size={19} />
+          <span>More</span>
         </button>
       </nav>
     </>

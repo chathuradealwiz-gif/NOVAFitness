@@ -178,7 +178,6 @@ for (let i = 0; i < PEOPLE.length; i++) {
       gender: person.gender,
       date_of_birth: iso(new Date(1990 + i, (i * 3) % 12, ((i * 7) % 28) + 1)),
       address: `No. ${10 + i}, Galle Road, Colombo`,
-      emergency_contact: `07712345${20 + i}`,
       join_date: iso(monthsAgo(6 - (i % 5))),
       notes: "DEMO",
       // Fingerprint slots are per-device and unrelated to the member number.

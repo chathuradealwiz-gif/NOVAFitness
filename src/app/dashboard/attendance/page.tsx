@@ -2,6 +2,7 @@ import Link from "next/link";
 import { requireStaff } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
 import { EmptyState, PageHeader } from "@/components/ui";
+import { AttendanceArt } from "@/components/illustrations";
 import { formatDateTime } from "@/lib/format";
 import type { Attendance, Member } from "@/types/database";
 import { AttendanceFilters } from "./AttendanceFilters";
@@ -58,7 +59,7 @@ export default async function AttendancePage({
       <AttendanceFilters from={from} to={to} type={searchParams.type} />
 
       {rows.length === 0 ? (
-        <EmptyState title="No attendance in this range" hint="Try widening the date filter." />
+        <EmptyState title="No attendance in this range" art={<AttendanceArt />} hint="Try widening the date filter." />
       ) : (
         <div className="nova-card mt-4">
           <div className="nova-table-wrap">

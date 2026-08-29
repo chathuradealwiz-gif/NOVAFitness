@@ -2,6 +2,8 @@ import Link from "next/link";
 import { requireMember } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
 import { StatusPill } from "@/components/ui";
+import { Avatar } from "@/components/Avatar";
+import { IconWhatsApp } from "@/components/icons";
 import { daysUntil, formatDate, formatMoney, PAYMENT_TYPE_LABELS } from "@/lib/format";
 import type {
   BroadcastMessage,
@@ -73,12 +75,15 @@ export default async function MemberHome() {
     <div className="space-y-4">
       <BroadcastBanner broadcasts={(broadcasts ?? []) as BroadcastMessage[]} />
 
-      <section>
-        <p className="nova-label">Welcome back</p>
-        <h1 className="font-display text-3xl font-black uppercase tracking-tight">
-          {member.full_name.split(" ")[0]}
-        </h1>
-        <span className="mt-1.5 block h-[3px] w-10 rounded-full bg-nova-red" />
+      <section className="flex items-center gap-3">
+        <Avatar name={member.full_name} src={member.profile_image_url} size={52} />
+        <div>
+          <p className="nova-label">Welcome back</p>
+          <h1 className="font-display text-2xl font-black uppercase tracking-tight">
+            {member.full_name.split(" ")[0]}
+          </h1>
+          <span className="mt-1 block h-[3px] w-10 rounded-full bg-nova-red" />
+        </div>
       </section>
 
       {/* ------------------------------------------------------- membership */}
@@ -220,6 +225,7 @@ export default async function MemberHome() {
           rel="noopener noreferrer"
           className="nova-btn w-full bg-emerald-600 text-white hover:bg-emerald-700"
         >
+          <IconWhatsApp size={17} />
           WhatsApp Us
         </a>
       )}

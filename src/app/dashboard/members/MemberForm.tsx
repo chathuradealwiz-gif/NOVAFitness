@@ -106,14 +106,6 @@ export function MemberForm({
         />
       </Field>
 
-      <Field label="Emergency Contact">
-        <input
-          name="emergency_contact"
-          className="nova-input"
-          defaultValue={member?.emergency_contact ?? ""}
-        />
-      </Field>
-
       {error && <p className="text-sm text-nova-red">{error}</p>}
 
       <div className="flex flex-wrap gap-3 pt-2">

@@ -58,7 +58,6 @@ export async function claimMembership(formData: FormData): Promise<ActionResult>
 const profileSchema = z.object({
   full_name: z.string().trim().min(2),
   phone: z.string().trim().min(6),
-  emergency_contact: z.string().trim().optional().or(z.literal("")),
   address: z.string().trim().optional().or(z.literal("")),
 });
 
@@ -77,7 +76,6 @@ export async function updateOwnProfile(formData: FormData): Promise<ActionResult
   const { error } = await supabase.rpc("update_own_member_profile", {
     p_full_name: parsed.data.full_name,
     p_phone: parsed.data.phone,
-    p_emergency_contact: parsed.data.emergency_contact || null,
     p_address: parsed.data.address || null,
   });
 
@@ -110,16 +108,17 @@ export async function saveProfileImage(publicUrl: string): Promise<ActionResult>
 
   const { data: member } = await supabase
     .from("members")
-    .select("full_name, phone, emergency_contact, address")
+    .select("full_name, phone, address")
     .eq("user_id", session.userId)
     .maybeSingle();
 
   if (!member) return { ok: false, error: "No member record found." };
 
+  // Re-sends the unchanged fields because the RPC updates the whole row; only the
+  // image is actually changing here.
   const { error } = await supabase.rpc("update_own_member_profile", {
     p_full_name: member.full_name,
     p_phone: member.phone ?? "",
-    p_emergency_contact: member.emergency_contact,
     p_address: member.address,
     p_profile_image_url: publicUrl,
   });

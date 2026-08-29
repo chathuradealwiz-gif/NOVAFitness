@@ -1,6 +1,7 @@
 import { requireStaff } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
 import { Logo } from "@/components/Logo";
+import { IconLogout } from "@/components/icons";
 import { DashboardNav } from "./DashboardNav";
 
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
@@ -26,7 +27,9 @@ export default async function DashboardLayout({ children }: { children: React.Re
         <header className="nova-rail sticky top-0 z-20 flex items-center justify-between gap-3 border-b border-nova-border bg-nova-black/90 px-4 py-3 backdrop-blur lg:hidden">
           <Logo logoPath={settings?.logo_path} size={30} />
           <form action="/auth/signout" method="post">
-            <button className="text-xs text-nova-muted">Sign out</button>
+            <button className="flex items-center gap-1.5 text-xs text-nova-muted" aria-label="Sign out">
+              <IconLogout size={16} />
+            </button>
           </form>
         </header>
 
@@ -38,7 +41,9 @@ export default async function DashboardLayout({ children }: { children: React.Re
             {session.isSuperAdmin ? "Super Admin" : "Admin"}
           </span>
           <form action="/auth/signout" method="post">
-            <button className="hover:text-nova-text">Sign out</button>
+            <button className="flex items-center gap-1.5 hover:text-nova-text">
+              <IconLogout size={15} /> Sign out
+            </button>
           </form>
         </div>
       </div>
