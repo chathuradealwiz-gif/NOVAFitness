@@ -13,15 +13,17 @@ import { createClient } from "@supabase/supabase-js";
 import { createHash, randomBytes } from "node:crypto";
 import { readFileSync } from "node:fs";
 
-try {
-  for (const line of readFileSync(".env.local", "utf8").split("\n")) {
-    const match = line.match(/^\s*([A-Z0-9_]+)\s*=\s*(.*)\s*$/);
-    if (match && !process.env[match[1]]) {
-      process.env[match[1]] = match[2].replace(/^["']|["']$/g, "");
+for (const file of [".env.local", ".env"]) {
+  try {
+    for (const line of readFileSync(file, "utf8").split("\n")) {
+      const match = line.match(/^\s*([A-Z0-9_]+)\s*=\s*(.*)\s*$/);
+      if (match && !process.env[match[1]]) {
+        process.env[match[1]] = match[2].trim().replace(/^["']|["']$/g, "");
+      }
     }
+  } catch {
+    // Missing file — fall through to the next one / the ambient environment.
   }
-} catch {
-  // No .env.local — rely on the ambient environment.
 }
 
 const [deviceCode, name = "Entrance Terminal", location = ""] = process.argv.slice(2);

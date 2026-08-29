@@ -18,11 +18,14 @@ Deno.serve(async (req) => {
 
   let body: {
     device_id: string;
-    action: "poll" | "report" | "removed";
+    action: "poll" | "report" | "removed" | "progress";
     request_id?: string;
     fingerprint_id?: number;
     success?: boolean;
     error?: string;
+    progress_step?: number;
+    progress_total?: number;
+    progress_message?: string;
   };
   try {
     body = await req.json();
@@ -114,6 +117,26 @@ Deno.serve(async (req) => {
       .eq("id", request.id);
 
     return json({ ok: true, assigned: true });
+  }
+
+  // Live capture progress, so the member page can show how far along the
+  // scan is instead of a bare "in progress". Best-effort: never fails the
+  // enrollment, since the device reports these while the member is waiting.
+  if (body.action === "progress") {
+    if (!body.request_id) return json({ error: "missing_request_id" }, 400);
+
+    await supabase
+      .from("enrollment_requests")
+      .update({
+        progress_step: Math.max(0, Math.min(body.progress_total ?? 4, body.progress_step ?? 0)),
+        progress_total: body.progress_total ?? 4,
+        progress_message: (body.progress_message ?? "").slice(0, 120),
+      })
+      .eq("id", body.request_id)
+      .eq("device_id", device.id)
+      .in("status", ["pending", "in_progress"]);
+
+    return json({ ok: true });
   }
 
   if (body.action === "removed") {

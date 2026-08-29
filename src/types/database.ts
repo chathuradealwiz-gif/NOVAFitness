@@ -201,6 +201,9 @@ export type EnrollmentRequest = {
   error_message: string | null;
   requested_by: string | null;
   expires_at: string;
+  progress_step: number;
+  progress_total: number;
+  progress_message: string | null;
   created_at: string;
   updated_at: string;
 }

@@ -24,3 +24,9 @@ supabase/.temp/
 
 # Placeholder for production env values — never commit
 docs/Meta_env_prod.txt
+
+# Device firmware secrets (device key, Wi-Fi password)
+firmware/config.py
+firmware/queue.jsonl
+firmware/cache.json
+firmware/counter.txt

@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Field } from "@/components/ui";
 import { Spinner } from "@/components/Loading";
 import {
@@ -351,13 +351,45 @@ function FingerprintPanel({
     router.refresh();
   }
 
+  // While a capture is running the device reports a step every couple of
+  // seconds; poll so staff watch the bar move instead of pressing Refresh.
+  const enrollmentId = activeEnrollment?.id ?? null;
+  useEffect(() => {
+    if (!enrollmentId) return;
+    const timer = setInterval(() => router.refresh(), 2000);
+    return () => clearInterval(timer);
+  }, [enrollmentId, router]);
+
   if (activeEnrollment) {
+    const total = activeEnrollment.progress_total || 4;
+    const percent = Math.round((activeEnrollment.progress_step / total) * 100);
+
     return (
       <div className="mt-4 space-y-3 border-t border-nova-border pt-4">
         <p className="text-sm">
-          Enrollment in progress. Ask <strong>{member.full_name}</strong> to place their finger on
-          the sensor. The page updates once the device reports the new slot.
+          Enrollment in progress. Ask <strong>{member.full_name}</strong> to follow the prompts on
+          the device — the finger must be pressed <strong>flat and still</strong>, in the same spot
+          both times.
         </p>
+
+        <div>
+          <div className="flex items-baseline justify-between">
+            <span className="nova-label">
+              {activeEnrollment.progress_message ?? "Waiting for the member at the sensor"}
+            </span>
+            <span className="font-mono text-sm">{percent}%</span>
+          </div>
+          <div className="mt-1 h-2 overflow-hidden rounded-full bg-nova-border">
+            <div
+              className="h-full rounded-full bg-nova-red transition-all duration-500"
+              style={{ width: `${percent}%` }}
+            />
+          </div>
+          <p className="mt-1 text-xs text-nova-muted">
+            Step {activeEnrollment.progress_step} of {total}
+          </p>
+        </div>
+
         <p className="text-xs text-nova-muted">
           Request expires {new Date(activeEnrollment.expires_at).toLocaleTimeString("en-GB")}.
         </p>
