@@ -317,6 +317,10 @@ export interface Database {
         { p_member_id: string; p_reason: string },
         { status: string; payments_retained?: number; fingerprint_queued?: boolean }
       >;
+      unassign_fingerprint: Fn<
+        { p_member_id: string },
+        { status: string; fingerprint_queued: boolean }
+      >;
       set_user_role: Fn<{ p_profile_id: string; p_role: UserRole }, { role: UserRole }>;
       set_profile_active: Fn<
         { p_profile_id: string; p_is_active: boolean },

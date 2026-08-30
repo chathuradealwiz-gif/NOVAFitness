@@ -69,22 +69,32 @@ export async function cancelEnrollment(requestId: string, memberId: string): Pro
  * Unassigns the biometric slot. The member row and all historical attendance stay
  * (spec §60) — only the mapping is cleared.
  *
- * This does NOT erase the template from the sensor: the finger stops opening the
- * door (device-sync drops it from the authorisation cache) but the template stays
- * in the R503's flash and the slot is not reused. Erasing it is what the
- * fingerprint_erasures queue does, and only deleting the profile enqueues one —
- * the assumption being that an unassign is usually a re-enrollment.
+ * This also queues the template for erasure from the sensor. It has to happen
+ * here rather than later: the slot number lives only in the columns this clears,
+ * so once they are null nothing in the database knows which slot to erase — and
+ * a re-enrollment does not reclaim it either, because the terminal allocates the
+ * next FREE slot, leaving the old template in the R503's flash for good.
+ *
+ * The queue is drained by device-sync, which hands the slot to the terminal on
+ * its next round trip.
  */
 export async function removeFingerprint(memberId: string): Promise<ActionResult> {
   await requireStaff();
   const supabase = createClient();
 
-  const { error } = await supabase
-    .from("members")
-    .update({ fingerprint_id: null, fingerprint_device_id: null })
-    .eq("id", memberId);
+  const { error } = await supabase.rpc("unassign_fingerprint", {
+    p_member_id: memberId,
+  });
 
-  if (error) return { ok: false, error: error.message };
+  if (error) {
+    return {
+      ok: false,
+      error:
+        error.code === "42501"
+          ? "Only staff can unassign a fingerprint."
+          : error.message,
+    };
+  }
 
   revalidatePath(`/dashboard/members/${memberId}`);
   return { ok: true };
