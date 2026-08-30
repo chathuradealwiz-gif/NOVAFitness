@@ -21,11 +21,13 @@
  */
 
 import { useRouter } from "next/navigation";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
+import type { ReactNode } from "react";
 import { MemberForm } from "../MemberForm";
 import { FingerprintPanel, PaymentPanel } from "../[id]/MemberActions";
 import { getEnrollmentState } from "@/lib/actions/fingerprint";
 import { ActionButton } from "@/components/Button";
+import { Spinner } from "@/components/Loading";
 import type {
   Device,
   EnrollmentRequest,
@@ -99,11 +101,24 @@ export function NewMemberWizard({
     };
   }, [step, memberId]);
 
+  // Leaving the wizard is a route change to a server-rendered page. useTransition
+  // is what makes that visible: the button stays busy until the member's page has
+  // actually committed, rather than until the tap was handled.
+  const [leaving, startLeaving] = useTransition();
+
+  function finish() {
+    if (!member) return;
+    startLeaving(() => router.push(`/dashboard/members/${member.id}`));
+  }
+
   const enrolled = member?.fingerprint_id != null;
+  // A capture is in flight at the terminal: the step is working even though
+  // nothing on this screen was pressed.
+  const waiting = step === 2 && !enrolled && live !== null;
 
   return (
     <div className="max-w-2xl" ref={top}>
-      <StepBar current={step} />
+      <StepBar current={step} busy={leaving || waiting} />
 
       {step === 1 && (
         <MemberForm
@@ -146,6 +161,16 @@ export function NewMemberWizard({
             onSkip={() => setStep(3)}
             skipLabel={enrolled ? "Continue to payment" : "Skip for now"}
           />
+
+          {/* The device reports a step every couple of seconds and the wizard is
+              polling for it. Say so, or a capture that has not started yet is
+              indistinguishable from a terminal that is not listening. */}
+          {!enrolled && live && (
+            <p className="mt-3 flex items-center gap-2 text-xs text-nova-muted">
+              <Spinner size={12} />
+              Waiting for {member.full_name} at the terminal…
+            </p>
+          )}
         </section>
       )}
 
@@ -164,13 +189,15 @@ export function NewMemberWizard({
             settings={settings}
             onDone={() => {
               setPaid(true);
-              router.push(`/dashboard/members/${member.id}`);
+              finish();
             }}
           />
 
           <StepFooter
-            onSkip={() => router.push(`/dashboard/members/${member.id}`)}
+            onSkip={finish}
             skipLabel={paid ? "Done" : "Finish without payment"}
+            busy={leaving}
+            busyLabel={<><Spinner size={16} /> Opening member…</>}
           />
         </section>
       )}
@@ -185,7 +212,7 @@ export function NewMemberWizard({
   );
 }
 
-function StepBar({ current }: { current: Step }) {
+function StepBar({ current, busy }: { current: Step; busy: boolean }) {
   return (
     <ol className="mb-5 flex gap-2" aria-label="Progress">
       {STEPS.map(({ n, label, hint }) => {
@@ -195,10 +222,16 @@ function StepBar({ current }: { current: Step }) {
         return (
           <li key={n} className="min-w-0 flex-1" aria-current={active ? "step" : undefined}>
             <div
-              className={`h-1 rounded-full transition-colors ${
+              className={`h-1 overflow-hidden rounded-full transition-colors ${
                 done || active ? "bg-nova-red" : "bg-nova-border"
               }`}
-            />
+            >
+              {/* The current step's bar carries the wait, so the progress
+                  indicator and the thing being waited on are the same object. */}
+              {active && busy && (
+                <div className="h-full w-1/3 bg-white/70 [animation:nova-btn-progress_1.1s_ease-in-out_infinite]" />
+              )}
+            </div>
             <p
               className={`mt-2 truncate font-display text-[10px] font-bold uppercase tracking-wider ${
                 active ? "text-nova-red" : done ? "text-nova-text" : "text-nova-muted"
@@ -215,10 +248,29 @@ function StepBar({ current }: { current: Step }) {
   );
 }
 
-function StepFooter({ onSkip, skipLabel }: { onSkip: () => void; skipLabel: string }) {
+/**
+ * The step's own way forward, separate from the action inside it.
+ *
+ * `busy` is passed in rather than left to the button: leaving a step means a
+ * route change, and a navigation started in an onClick outlives the handler's
+ * promise. Without it the bar would stop the moment the tap was handled, while
+ * the member's page was still loading — exactly the dead window that gets a
+ * button pressed twice.
+ */
+function StepFooter({
+  onSkip,
+  skipLabel,
+  busy = false,
+  busyLabel,
+}: {
+  onSkip: () => void;
+  skipLabel: string;
+  busy?: boolean;
+  busyLabel?: ReactNode;
+}) {
   return (
     <div className="mt-4 flex flex-wrap gap-2 border-t border-nova-border pt-4">
-      <ActionButton variant="ghost" onClick={onSkip}>
+      <ActionButton variant="ghost" onClick={onSkip} busy={busy} busyLabel={busyLabel}>
         {skipLabel}
       </ActionButton>
     </div>

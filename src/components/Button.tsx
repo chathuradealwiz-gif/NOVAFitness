@@ -51,14 +51,23 @@ export function ActionButton({
   variant = "primary",
   className,
   disabled,
+  busy: externalBusy = false,
   ...rest
 }: {
   onClick: () => void | Promise<unknown>;
   children: ReactNode;
   busyLabel?: ReactNode;
   variant?: Variant;
-} & Omit<ComponentProps<"button">, "onClick" | "children">) {
-  const [busy, setBusy] = useState(false);
+  /**
+   * Keeps the button busy for work it cannot see the end of — a navigation
+   * started inside `onClick` outlives the promise, so without this the bar
+   * stops the instant the handler returns and the button looks finished while
+   * the next screen is still loading.
+   */
+  busy?: boolean;
+} & Omit<ComponentProps<"button">, "onClick" | "children" | "busy">) {
+  const [internalBusy, setInternalBusy] = useState(false);
+  const busy = internalBusy || externalBusy;
   const running = useRef(false);
   // The action can navigate or unmount the panel it lives in; setting state on
   // the way out would warn and, worse, leave the guard latched.
@@ -73,12 +82,12 @@ export function ActionButton({
   const handle = useCallback(async () => {
     if (running.current) return;
     running.current = true;
-    setBusy(true);
+    setInternalBusy(true);
     try {
       await onClick();
     } finally {
       running.current = false;
-      if (mounted.current) setBusy(false);
+      if (mounted.current) setInternalBusy(false);
     }
   }, [onClick]);
 
