@@ -188,7 +188,14 @@ class R503:
 
         return code
 
-    def wait_finger(self, timeout_ms=10000, poll_ms=120):
+    def wait_finger(self, timeout_ms=10000, poll_ms=120, on_tick=None):
+        """Wait for a finger. `on_tick` runs once per poll.
+
+        The terminal has one thread, so this loop is the only place an idle
+        animation can be advanced while the sensor is being waited on. It runs
+        after the sensor read, never before: a frame drawn first would be added
+        to how long the member has to hold still.
+        """
         deadline = time.ticks_add(time.ticks_ms(), timeout_ms)
 
         while time.ticks_diff(deadline, time.ticks_ms()) > 0:
@@ -198,11 +205,17 @@ class R503:
             except OSError:
                 pass
 
+            if on_tick:
+                try:
+                    on_tick()
+                except Exception:
+                    pass          # never let a dropped frame block the door
+
             time.sleep_ms(poll_ms)
 
         return False
 
-    def wait_removed(self, timeout_ms=8000):
+    def wait_removed(self, timeout_ms=8000, on_tick=None):
         deadline = time.ticks_add(time.ticks_ms(), timeout_ms)
 
         while time.ticks_diff(deadline, time.ticks_ms()) > 0:
@@ -211,6 +224,12 @@ class R503:
                     return True
             except OSError:
                 pass
+
+            if on_tick:
+                try:
+                    on_tick()
+                except Exception:
+                    pass
 
             time.sleep_ms(120)
 
@@ -344,7 +363,8 @@ class R503:
 
         return self.search(1)
 
-    def enroll(self, page_id, on_step=None, timeout_ms=15000, attempts=3):
+    def enroll(self, page_id, on_step=None, timeout_ms=15000, attempts=3,
+               on_tick=None):
         """Two-capture enrollment into page_id.
 
         The two captures have to be the same finger in roughly the same place.
@@ -360,7 +380,7 @@ class R503:
 
         def capture(buffer_id, prompt):
             step(buffer_id, prompt)
-            if not self.wait_finger(timeout_ms):
+            if not self.wait_finger(timeout_ms, on_tick=on_tick):
                 self.aura(AURA_OFF, BLUE)
                 raise OSError("No finger")
             self.img2tz(buffer_id)
@@ -371,7 +391,7 @@ class R503:
             capture(1, "Place finger flat on the sensor")
 
             step(1, "Lift your finger off")
-            self.wait_removed()
+            self.wait_removed(on_tick=on_tick)
 
             capture(2, "Place the SAME finger again")
 

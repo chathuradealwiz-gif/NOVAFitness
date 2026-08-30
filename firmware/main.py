@@ -192,20 +192,20 @@ class Terminal:
 
     # --- fingerprint sign-in ------------------------------------------------
     def sign_in(self, prompted=False):
-        self.ui.busy("Scanning", "Place your finger on the sensor")
+        self.ui.scan("Scanning", "Place your finger on the sensor")
         self.ui.footer(self.footer_text())
         self.fp.aura(AURA_BREATHE, BLUE, 60)
         if prompted:
             self.buzzer.prompt()
 
         try:
-            if not self.fp.wait_finger(8000):
+            if not self.fp.wait_finger(8000, on_tick=self.ui.scan_tick):
                 self.fp.aura(AURA_OFF, BLUE)
                 self.show_home("Timed out - try again")
                 return
             self.fp.img2tz(1)
             self.buzzer.tap()
-            self.ui.busy("Reading", "Checking your fingerprint")
+            self.ui.reading("Reading", "Checking your fingerprint")
             match = self.fp.search(1)
         except (FingerprintError, OSError) as e:
             self.fp.aura(AURA_FLASH, AURA_RED, 60, 3)
@@ -289,7 +289,7 @@ class Terminal:
         member = enrollment.get("member_name") or "New member"
         membership_id = enrollment.get("membership_id") or ""
 
-        self.ui.busy("Enrolling", member, accent=AMBER)
+        self.ui.enroll_begin(member)
         self.ui.footer("ID %s" % membership_id if membership_id else self.footer_text())
         self.buzzer.prompt()
         time.sleep_ms(700)
@@ -301,16 +301,14 @@ class Terminal:
 
             def on_step(step, msg):
                 # msg is the instruction for the member ("place flat", "lift
-                # off"); the percentage tells staff it is still moving.
-                self.ui.busy("Enrolling  %d%%" % (step * 100 // 4), msg,
-                             accent=AMBER)
-                self.ui.progress(step, 4)
-                self.ui.footer(member[:26])
+                # off"); the ridges fill to the same percentage the dashboard
+                # is showing staff on the member's page.
+                self.ui.enroll_step(step, 4, msg)
                 if step in (1, 2):
                     self.buzzer.prompt()
                 self.api.report_progress(request_id, step, 4, msg)
 
-            self.fp.enroll(slot, on_step=on_step)
+            self.fp.enroll(slot, on_step=on_step, on_tick=self.ui.enroll_tick)
         except (FingerprintError, OSError) as e:
             self.fp.aura(AURA_FLASH, AURA_RED, 60, 3)
             self.buzzer.denied()
@@ -477,7 +475,7 @@ class Terminal:
                         # it is added to how long the member must hold.
                         self.fp.img2tz(1)
                         self.buzzer.tap()          # "got it - you can lift off"
-                        self.ui.busy("Reading", "Checking your fingerprint")
+                        self.ui.reading("Reading", "Checking your fingerprint")
                         match = self.fp.search(1)
                         if match is None:
                             self.fp.aura(AURA_FLASH, AURA_RED, 60, 3)

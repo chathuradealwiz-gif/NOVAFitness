@@ -38,6 +38,7 @@ on Vercel, and nothing on the device to expose to the internet.
 | `main.py` | State machine: idle → scan → decision, plus timers |
 | `nova_display.py` | ILI9341 driver with scaled text and rounded panels |
 | `nova_ui.py` | Screens and buttons in the web app's design language |
+| `nova_art.py` | Fingerprint mark and finger-on-sensor artwork |
 | `xpt2046.py` | Touch controller, on its own SPI bus |
 | `r503.py` | Fingerprint protocol: identify, enroll, slot allocation |
 | `nova_net.py` | Wi-Fi, hand-rolled HTTPS POST, the five API calls |

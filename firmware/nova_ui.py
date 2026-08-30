@@ -15,10 +15,15 @@ uppercase; at 240x320 that is as close as a bitmap font gets.
 from nova_display import (Display, WIDTH, HEIGHT, BLACK, SURFACE, CARD,
                           ELEVATED, BORDER, BORDER_HI, RED, RED_DEEP, TEXT,
                           MUTED, WHITE, GREEN, AMBER)
+from nova_art import Fingerprint, finger_on_sensor
 import time
 
 HEADER_H = 44
 FOOTER_H = 24
+
+# Whoever is standing at the door reads this once and never again, so it is
+# sized like a watermark rather than a credit line.
+AUTHOR = "by Pasan Weerasinghe"
 
 
 class Button:
@@ -65,6 +70,15 @@ class UI:
         self.d = Display(cfg)
         self.device_code = cfg.DEVICE_CODE
         self._footer = ""
+        # Two sizes: a small mark on the home card, a large one to animate on
+        # the scan and enrollment screens. Built once, reused for the life of
+        # the terminal (nova_art caches the row tables).
+        self.fp_small = Fingerprint(34, 44, weight=2)
+        self.fp_large = Fingerprint(76, 96, weight=3)
+        self._band = None          # current scan band row
+        self._phase = 0            # finger-on-sensor phase
+        self._fill = 0             # enrollment fill percent already painted
+        self._ticks = 0
 
     # --- chrome -------------------------------------------------------------
     def header(self, title=None, accent=RED):
@@ -94,6 +108,9 @@ class UI:
         """The .nova-label style: tiny, uppercase, widely tracked."""
         self.d.text(text.upper(), x, y, color, None, 1, 2)
 
+    def watermark(self, y, bg=BLACK):
+        self.d.text_center(AUTHOR, y, MUTED, bg, 1, 0)
+
     # --- screens ------------------------------------------------------------
     def splash(self, line=""):
         d = self.d
@@ -102,6 +119,7 @@ class UI:
         d.text_center("FITNESS", 166, RED, BLACK, 3, 4)
         d.hline(60, 206, 120, BORDER)
         d.text_center(line.upper()[:26], 224, MUTED, BLACK, 1, 1)
+        self.watermark(292)
 
     def status_line(self, line):
         """Repaint just the splash's status line, without redrawing the logo."""
@@ -118,10 +136,58 @@ class UI:
         d.fill_rect(14, 72, 3, 88, RED)
         self.label("Fingerprint", 28, 74)
         d.text("READY", 28, 92, TEXT, CARD, 3, 3)
-        for i, line in enumerate(d.wrap(hint, 24)[:2]):
+        for i, line in enumerate(d.wrap(hint, 19)[:2]):
             d.text(line, 28, 132 + i * 12, MUTED, CARD, 1, 0)
+        # The fingerprint mark sits inside the card, on the red rail's side of
+        # the panel, so "READY" and the thing you press are one object.
+        self.fp_small.draw(d, 180, 88, RED)
         for b in buttons:
             b.draw(d)
+        self.watermark(222)
+
+    # --- fingerprint scan ---------------------------------------------------
+    def scan(self, title="Scanning", detail="Place your finger on the sensor"):
+        """Waiting for a finger: a large print with a travelling scan band, and
+        below it a fingertip coming down onto the sensor pad."""
+        d = self.d
+        self.header(title)
+        self.body()
+        d.round_frame(12, 58, WIDTH - 24, 206, CARD, BORDER, r=10)
+        d.fill_rect(14, 72, 3, 60, RED)
+        self.fp_large.draw(d, 82, 72, BORDER_HI)
+        self._band = None
+        self._phase = 0
+        self._ticks = 0
+        finger_on_sensor(d, 89, 178, 0)
+        for i, line in enumerate(d.wrap(detail, 26)[:2]):
+            d.text_center(line, 236 + i * 14, MUTED, CARD, 1, 0)
+
+    def scan_tick(self):
+        """One animation frame. Called from the sensor poll loop, so it must
+        stay cheap - it repaints two bands of ridges and the fingertip."""
+        d = self.d
+        h = self.fp_large.h
+        nxt = 0 if self._band is None else self._band + 6
+        if nxt >= h:
+            nxt = 0
+        self.fp_large.scan(d, 82, 72, self._band, nxt)
+        self._band = nxt
+        self._ticks += 1
+        if self._ticks % 3 == 0:
+            self._phase = (self._phase + 1) % 6
+            finger_on_sensor(d, 89, 178, self._phase)
+
+    # --- reading ------------------------------------------------------------
+    def reading(self, title="Reading", detail="Checking your fingerprint"):
+        """Static: the fingerprint mark and the word. The search and the Edge
+        Function call both block, so anything moving here would only freeze
+        part-way through and look broken."""
+        d = self.d
+        self.header(title)
+        self.body()
+        d.round_frame(12, 70, WIDTH - 24, 150, CARD, BORDER, r=10)
+        self.fp_large.draw(d, 82, 92, RED)
+        d.text_center(title.upper()[:16], 196, TEXT, CARD, 2, 2)
 
     def busy(self, title, detail="", accent=RED):
         d = self.d
@@ -135,13 +201,54 @@ class UI:
             d.text_center(line, y + 34 + i * 14, MUTED, CARD, 1, 1)
         return y + 34 + len(lines) * 14
 
-    def progress(self, step, total, y=196):
+    # --- enrollment ---------------------------------------------------------
+    def enroll_begin(self, member):
+        """Chrome for the enrollment screen, drawn once.
+
+        Each step then repaints only the percentage, the ridges that changed
+        and the instruction - a full redraw per capture makes the screen blink
+        at exactly the moment the member is being told to hold still.
+        """
+        d = self.d
+        self.header("Enrolling", AMBER)
+        self.body()
+        d.round_frame(12, 58, WIDTH - 24, 206, CARD, BORDER, r=10)
+        d.fill_rect(14, 72, 3, 40, AMBER)
+        self.fp_large.draw(d, 30, 104, BORDER_HI)
+        self._fill = 0
+        self._phase = 0
+        self._ticks = 0
+        finger_on_sensor(d, 148, 126, 0, accent=AMBER)
+        d.text_center(member[:26], 76, TEXT, CARD, 1, 1)
+
+    def enroll_step(self, step, total, msg):
+        d = self.d
+        pct = step * 100 // total
+        d.fill_rect(60, 88, 120, 16, CARD)
+        d.text_center("%d%%" % pct, 88, AMBER, CARD, 2, 2)
+        self.fp_large.fill(d, 30, 104, self._fill, pct, hot=AMBER)
+        self._fill = pct
+        self.progress(step, total, y=214, color=AMBER)
+        d.fill_rect(20, 228, WIDTH - 40, 28, CARD)
+        for i, line in enumerate(d.wrap(msg, 26)[:2]):
+            d.text_center(line, 228 + i * 14, MUTED, CARD, 1, 0)
+
+    def enroll_tick(self):
+        """The fingertip keeps moving while the sensor waits for a capture, so
+        a member who has not placed their finger yet can see what to do."""
+        self._ticks += 1
+        if self._ticks % 3:
+            return
+        self._phase = (self._phase + 1) % 6
+        finger_on_sensor(self.d, 148, 126, self._phase, accent=AMBER)
+
+    def progress(self, step, total, y=196, color=RED):
         """Segmented bar for the two-capture enrollment."""
         d = self.d
         seg = (WIDTH - 56) // total
         for i in range(total):
             x = 28 + i * seg
-            d.fill_rect(x, y, seg - 6, 5, RED if i < step else BORDER)
+            d.fill_rect(x, y, seg - 6, 5, color if i < step else BORDER)
 
     def result(self, granted, title, name="", detail="", meta=""):
         """The scan verdict. Green only ever means the door opened; every
