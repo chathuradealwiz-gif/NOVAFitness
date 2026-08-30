@@ -102,7 +102,11 @@ class R503:
         buf = bytearray()
 
         while time.ticks_diff(deadline, time.ticks_ms()) > 0:
-            chunk = self.uart.read()
+            # Only ever read what is already buffered. A bare uart.read() blocks
+            # for the full UART timeout (1 s) whenever the sensor has not replied
+            # yet, which used to add ~1-2 s to every single command.
+            waiting = self.uart.any()
+            chunk = self.uart.read(waiting) if waiting else None
 
             if chunk:
                 buf.extend(chunk)
@@ -134,7 +138,7 @@ class R503:
                         return pkt[9:total - 2]
 
             else:
-                time.sleep_ms(10)
+                time.sleep_ms(2)
 
         raise OSError("R503 timeout")
 

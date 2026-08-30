@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { Field } from "@/components/ui";
 import { Spinner } from "@/components/Loading";
+import { FingerprintScan } from "@/components/FingerprintScan";
 import {
   IconAttendance,
   IconEdit,
@@ -372,22 +373,27 @@ function FingerprintPanel({
           both times.
         </p>
 
-        <div>
-          <div className="flex items-baseline justify-between">
-            <span className="nova-label">
-              {activeEnrollment.progress_message ?? "Waiting for the member at the sensor"}
-            </span>
-            <span className="font-mono text-sm">{percent}%</span>
+        <div className="flex items-center gap-4">
+          <FingerprintScan percent={percent} />
+
+          <div className="min-w-0 flex-1">
+            <div className="flex items-baseline justify-between gap-2">
+              <span className="nova-label">
+                {activeEnrollment.progress_message ?? "Waiting for the member at the sensor"}
+              </span>
+              <span className="font-mono text-sm">{percent}%</span>
+            </div>
+            <div className="mt-1 h-2 overflow-hidden rounded-full bg-nova-border">
+              <div
+                className="h-full rounded-full bg-nova-red transition-all duration-500"
+                style={{ width: `${percent}%` }}
+              />
+            </div>
+            <p className="mt-1 text-xs text-nova-muted">
+              Step {activeEnrollment.progress_step} of {total} — press the pad of the finger on the
+              marked spot.
+            </p>
           </div>
-          <div className="mt-1 h-2 overflow-hidden rounded-full bg-nova-border">
-            <div
-              className="h-full rounded-full bg-nova-red transition-all duration-500"
-              style={{ width: `${percent}%` }}
-            />
-          </div>
-          <p className="mt-1 text-xs text-nova-muted">
-            Step {activeEnrollment.progress_step} of {total}
-          </p>
         </div>
 
         <p className="text-xs text-nova-muted">

@@ -49,11 +49,23 @@ const config: Config = {
           "0%": { transform: "translateX(-100%)" },
           "100%": { transform: "translateX(200%)" },
         },
+        // Fingerprint capture: the ring marking where to press, and the scan
+        // line travelling over the print while the sensor reads.
+        "fp-target": {
+          "0%, 100%": { transform: "scale(1)", opacity: "0.5" },
+          "50%": { transform: "scale(1.15)", opacity: "1" },
+        },
+        "fp-scan": {
+          "0%, 100%": { transform: "translateY(-32px)" },
+          "50%": { transform: "translateY(32px)" },
+        },
       },
       animation: {
         // Kept minimal on purpose — member pages run on mid-range phones.
         "fade-up": "fade-up 0.22s ease-out",
         sweep: "sweep 4s ease-in-out infinite",
+        "fp-target": "fp-target 1.8s ease-in-out infinite",
+        "fp-scan": "fp-scan 2.4s ease-in-out infinite",
       },
     },
   },

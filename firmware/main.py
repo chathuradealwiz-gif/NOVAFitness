@@ -107,6 +107,7 @@ class Terminal:
         self.online = False
         self.last_heartbeat = 0
         self.last_poll = 0
+        self._since_gc = 0
         self.buttons = self._home_buttons()
 
     # --- layout -------------------------------------------------------------
@@ -202,8 +203,9 @@ class Terminal:
                 self.fp.aura(AURA_OFF, BLUE)
                 self.show_home("Timed out - try again")
                 return
-            self.ui.busy("Reading", "Hold still")
             self.fp.img2tz(1)
+            self.buzzer.tap()
+            self.ui.busy("Reading", "Checking your fingerprint")
             match = self.fp.search(1)
         except (FingerprintError, OSError) as e:
             self.fp.aura(AURA_FLASH, AURA_RED, 60, 3)
@@ -270,7 +272,7 @@ class Terminal:
                            message or "Access granted", meta)
             self.ui.footer(self.footer_text())
             self.door.unlock()
-            self.hold(2000)
+            self.hold(1200)
         else:
             self.fp.aura(AURA_FLASH, AURA_RED, 60, 3)
             self.buzzer.denied()
@@ -470,8 +472,12 @@ class Terminal:
                 # Idle: a finger on the sensor signs in without touching anything.
                 try:
                     if self.fp.get_image() == 0:
-                        self.ui.busy("Reading", "Hold still")
+                        # Convert first, draw second. img2tz() is the step the
+                        # finger has to stay still for, so anything drawn before
+                        # it is added to how long the member must hold.
                         self.fp.img2tz(1)
+                        self.buzzer.tap()          # "got it - you can lift off"
+                        self.ui.busy("Reading", "Checking your fingerprint")
                         match = self.fp.search(1)
                         if match is None:
                             self.fp.aura(AURA_FLASH, AURA_RED, 60, 3)
@@ -487,8 +493,14 @@ class Terminal:
                 except OSError:
                     pass
 
-                time.sleep_ms(60)
-                gc.collect()
+                # Poll twice as often, and collect every ~3s instead of every
+                # pass: a full collect between polls is dead time in which a
+                # finger already on the sensor is not noticed.
+                time.sleep_ms(30)
+                self._since_gc += 1
+                if self._since_gc >= 100:
+                    self._since_gc = 0
+                    gc.collect()
 
             except Exception as e:
                 # A door terminal must not drop to the REPL in the middle of a
