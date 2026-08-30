@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { requireStaff } from "@/lib/auth/session";
 import type { ActionResult } from "./members";
+import type { EnrollmentRequest } from "@/types/database";
 
 /**
  * Puts a device into enrollment mode for one member. The device polls
@@ -98,4 +99,36 @@ export async function removeFingerprint(memberId: string): Promise<ActionResult>
 
   revalidatePath(`/dashboard/members/${memberId}`);
   return { ok: true };
+}
+
+/**
+ * The member's in-flight enrolment and current slot, for polling.
+ *
+ * The member page gets both from its own server render and refreshes the route
+ * to follow a capture. The signup wizard cannot: it lives on /members/new,
+ * which knows nothing about a member created a moment ago in the browser, so
+ * refreshing that route would poll forever against a null enrolment. This reads
+ * the two rows directly instead.
+ */
+export async function getEnrollmentState(memberId: string): Promise<{
+  enrollment: EnrollmentRequest | null;
+  fingerprintId: number | null;
+}> {
+  await requireStaff();
+  const supabase = createClient();
+
+  const [{ data: enrollment }, { data: member }] = await Promise.all([
+    supabase
+      .from("enrollment_requests")
+      .select("*")
+      .eq("member_id", memberId)
+      .in("status", ["pending", "in_progress"])
+      .maybeSingle(),
+    supabase.from("members").select("fingerprint_id").eq("id", memberId).maybeSingle(),
+  ]);
+
+  return {
+    enrollment: (enrollment as EnrollmentRequest) ?? null,
+    fingerprintId: (member?.fingerprint_id as number | null) ?? null,
+  };
 }

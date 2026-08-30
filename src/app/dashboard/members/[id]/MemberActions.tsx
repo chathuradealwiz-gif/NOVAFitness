@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { Field } from "@/components/ui";
 import { Spinner } from "@/components/Loading";
+import { ActionButton, LinkButton, PanelToggle, SubmitButton } from "@/components/Button";
 import { FingerprintScan } from "@/components/FingerprintScan";
 import {
   IconAttendance,
@@ -44,44 +45,60 @@ export function MemberActions({
   isSuperAdmin: boolean;
 }) {
   const [panel, setPanel] = useState<Panel>(null);
+  // The panel opens below the buttons, which on a phone is off the bottom of the
+  // screen — so the tap looked like it had done nothing and staff pressed again.
+  // The toggle now holds a selected state and the panel comes to the reader.
+  const panelRef = useRef<HTMLDivElement>(null);
+
+  function toggle(next: Panel) {
+    setPanel((current) => (current === next ? null : next));
+  }
+
+  useEffect(() => {
+    if (!panel) return;
+    panelRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+  }, [panel]);
 
   return (
     <section className="nova-card">
       <h2 className="mb-3 text-sm font-semibold">Actions</h2>
 
       <div className="flex flex-wrap gap-2">
-        <button className="nova-btn-primary" onClick={() => setPanel(panel === "payment" ? null : "payment")}>
+        <PanelToggle
+          open={panel === "payment"}
+          className={panel === "payment" ? undefined : "nova-btn-primary"}
+          onClick={() => toggle("payment")}
+        >
           <IconPayments size={16} />
           Record Payment
-        </button>
-        <button
-          className="nova-btn-ghost"
-          onClick={() => setPanel(panel === "fingerprint" ? null : "fingerprint")}
-        >
+        </PanelToggle>
+        <PanelToggle open={panel === "fingerprint"} onClick={() => toggle("fingerprint")}>
           <IconFingerprint size={16} />
           {member.fingerprint_id === null ? "Enroll Fingerprint" : "Manage Fingerprint"}
-        </button>
-        <button className="nova-btn-ghost" onClick={() => setPanel(panel === "status" ? null : "status")}>
+        </PanelToggle>
+        <PanelToggle open={panel === "status"} onClick={() => toggle("status")}>
           <IconStatus size={16} />
           Change Status
-        </button>
-        <Link href={`/dashboard/members/${member.id}/edit`} className="nova-btn-ghost">
+        </PanelToggle>
+        <LinkButton href={`/dashboard/members/${member.id}/edit`}>
           <IconEdit size={16} />
           Edit Member
-        </Link>
-        <Link href={`/dashboard/workouts/new?member=${member.id}`} className="nova-btn-ghost">
+        </LinkButton>
+        <LinkButton href={`/dashboard/workouts/new?member=${member.id}`}>
           <IconWorkout size={16} />
           Assign Workout
-        </Link>
-        <Link href={`/dashboard/meals/new?member=${member.id}`} className="nova-btn-ghost">
+        </LinkButton>
+        <LinkButton href={`/dashboard/meals/new?member=${member.id}`}>
           <IconMeal size={16} />
           Assign Meal Plan
-        </Link>
-        <Link href={`/dashboard/attendance?member=${member.id}`} className="nova-btn-ghost">
+        </LinkButton>
+        <LinkButton href={`/dashboard/attendance?member=${member.id}`}>
           <IconAttendance size={16} />
           Attendance
-        </Link>
+        </LinkButton>
       </div>
+
+      <div ref={panelRef} />
 
       {panel === "payment" && (
         <PaymentPanel member={member} settings={settings} onDone={() => setPanel(null)} />
@@ -190,9 +207,13 @@ function DeletePanel({ member, onDone }: { member: Member; onDone: () => void })
       {error && <p className="text-sm text-nova-red">{error}</p>}
 
       <div className="flex gap-2">
-        <button className="nova-btn-primary" onClick={run} disabled={!armed || busy}>
-          {busy ? (<><Spinner size={16} /> Deleting…</>) : "Delete permanently"}
-        </button>
+        <ActionButton
+          onClick={run}
+          disabled={!armed}
+          busyLabel={<><Spinner size={16} /> Deleting…</>}
+        >
+          Delete permanently
+        </ActionButton>
         <button className="nova-btn-ghost" onClick={onDone} disabled={busy}>
           Cancel
         </button>
@@ -208,7 +229,7 @@ const PAYMENT_TYPES: PaymentType[] = [
   "other",
 ];
 
-function PaymentPanel({
+export function PaymentPanel({
   member,
   settings,
   onDone,
@@ -330,9 +351,9 @@ function PaymentPanel({
       {error && <p className="text-sm text-nova-red">{error}</p>}
 
       <div className="flex gap-2">
-        <button type="submit" className="nova-btn-primary" disabled={busy}>
-          {busy ? (<><Spinner size={16} /> Saving…</>) : "Save Payment"}
-        </button>
+        <SubmitButton busy={busy} busyLabel={<><Spinner size={16} /> Saving…</>}>
+          Save Payment
+        </SubmitButton>
         <button type="button" className="nova-btn-ghost" onClick={onDone}>
           Cancel
         </button>
@@ -405,9 +426,9 @@ function StatusPanel({ member, onDone }: { member: Member; onDone: () => void })
             Change <strong>{member.membership_id}</strong> from {member.status} to {status}?
           </p>
           <div className="mt-3 flex gap-2">
-            <button className="nova-btn-primary" onClick={apply} disabled={busy}>
-              {busy ? (<><Spinner size={16} /> Applying…</>) : "Confirm"}
-            </button>
+            <ActionButton onClick={apply} busyLabel={<><Spinner size={16} /> Applying…</>}>
+              Confirm
+            </ActionButton>
             <button className="nova-btn-ghost" onClick={() => setConfirming(false)}>
               Back
             </button>
@@ -431,7 +452,7 @@ function StatusPanel({ member, onDone }: { member: Member; onDone: () => void })
   );
 }
 
-function FingerprintPanel({
+export function FingerprintPanel({
   member,
   devices,
   activeEnrollment,
@@ -553,13 +574,13 @@ function FingerprintPanel({
           {error && <p className="text-sm text-nova-red">{error}</p>}
 
           <div className="flex gap-2">
-            <button
-              className="nova-btn-primary"
-              disabled={busy || !deviceId}
+            <ActionButton
+              disabled={!deviceId}
+              busyLabel={<><Spinner size={16} /> Starting…</>}
               onClick={() => run(() => requestEnrollment(member.id, deviceId))}
             >
-              {busy ? (<><Spinner size={16} /> Starting…</>) : "Start Enrollment"}
-            </button>
+              Start Enrollment
+            </ActionButton>
             <button className="nova-btn-ghost" onClick={onDone}>
               Cancel
             </button>
@@ -571,6 +592,10 @@ function FingerprintPanel({
             Fingerprint <span className="font-mono">#{member.fingerprint_id}</span> is assigned.
             Removing it keeps the member and all their attendance history — only door access stops.
           </p>
+          <p className="text-xs text-nova-muted">
+            The template is also erased from the sensor on the device&apos;s next sync, freeing
+            the slot. Re-enrolling means scanning the finger again.
+          </p>
           {!isSuperAdmin && (
             <p className="text-xs text-nova-muted">
               Re-enrolling on another device requires removing this assignment first.
@@ -578,13 +603,12 @@ function FingerprintPanel({
           )}
           {error && <p className="text-sm text-nova-red">{error}</p>}
           <div className="flex gap-2">
-            <button
-              className="nova-btn-primary"
-              disabled={busy}
+            <ActionButton
+              busyLabel={<><Spinner size={16} /> Removing…</>}
               onClick={() => run(() => removeFingerprint(member.id))}
             >
-              {busy ? (<><Spinner size={16} /> Removing…</>) : "Remove Fingerprint"}
-            </button>
+              Remove Fingerprint
+            </ActionButton>
             <button className="nova-btn-ghost" onClick={onDone}>
               Cancel
             </button>

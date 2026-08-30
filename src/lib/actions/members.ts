@@ -52,7 +52,7 @@ export async function createMember(formData: FormData): Promise<ActionResult> {
   const { data, error } = await supabase
     .from("members")
     .insert(clean(parsed.data))
-    .select("id")
+    .select("*")
     .single();
 
   if (error) {
@@ -78,7 +78,9 @@ export async function createMember(formData: FormData): Promise<ActionResult> {
   // member is prefilled with the number that was just used — which is what made
   // creating two members in a row fail on a duplicate.
   revalidatePath("/dashboard/members/new");
-  return { ok: true, data: { id: data.id } };
+  // The whole row, not just the id: the signup wizard carries straight on to
+  // fingerprint enrolment and payment, and both need the member itself.
+  return { ok: true, data };
 }
 
 export async function updateMember(memberId: string, formData: FormData): Promise<ActionResult> {

@@ -1,18 +1,26 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { createMember, updateMember } from "@/lib/actions/members";
 import { Field } from "@/components/ui";
 import { Spinner } from "@/components/Loading";
+import { SubmitButton } from "@/components/Button";
 import type { Member } from "@/types/database";
 
 export function MemberForm({
   member,
   suggestedId,
+  onCreated,
 }: {
   member?: Member;
   suggestedId?: string;
+  /**
+   * Called with the new row instead of navigating to it. The signup wizard uses
+   * this to stay put and move on to the fingerprint step; without it the form
+   * keeps its old behaviour of going straight to the member's page.
+   */
+  onCreated?: (member: Member) => void;
 }) {
   const router = useRouter();
   const [error, setError] = useState<string | null>(null);
@@ -23,7 +31,14 @@ export function MemberForm({
     member?.membership_id ?? suggestedId ?? "",
   );
 
+  // A ref rather than the `busy` state: two taps in the same tick both read the
+  // pre-render value of state and both submit, which on a phone — where the
+  // button gives no hover feedback — is an easy thing to do by accident.
+  const inFlight = useRef(false);
+
   async function handleSubmit(formData: FormData) {
+    if (inFlight.current) return;
+    inFlight.current = true;
     setBusy(true);
     setError(null);
 
@@ -34,13 +49,21 @@ export function MemberForm({
     setBusy(false);
 
     if (!result.ok) {
+      inFlight.current = false;
       const suggestion = (result.data as { suggestedId?: string } | undefined)?.suggestedId;
       if (suggestion) setMembershipId(suggestion);
       setError(result.error ?? "Something went wrong.");
       return;
     }
 
-    const id = member?.id ?? (result.data as { id: string }).id;
+    if (!member && onCreated) {
+      // The wizard takes over from here; stay mounted and keep the guard
+      // latched so the form cannot be submitted a second time behind it.
+      onCreated(result.data as Member);
+      return;
+    }
+
+    const id = member?.id ?? (result.data as Member).id;
     router.push(`/dashboard/members/${id}`);
   }
 
@@ -117,10 +140,18 @@ export function MemberForm({
       {error && <p className="text-sm text-nova-red">{error}</p>}
 
       <div className="flex flex-wrap gap-3 pt-2">
-        <button type="submit" className="nova-btn-primary" disabled={busy}>
-          {busy ? (<><Spinner size={16} /> Saving…</>) : member ? "Save Changes" : "Create Member"}
-        </button>
-        <button type="button" className="nova-btn-ghost" onClick={() => router.back()}>
+        <SubmitButton
+          busy={busy}
+          busyLabel={<><Spinner size={16} /> Saving…</>}
+        >
+          {member ? "Save Changes" : "Create Member"}
+        </SubmitButton>
+        <button
+          type="button"
+          className="nova-btn-ghost"
+          disabled={busy}
+          onClick={() => router.back()}
+        >
           Cancel
         </button>
       </div>
