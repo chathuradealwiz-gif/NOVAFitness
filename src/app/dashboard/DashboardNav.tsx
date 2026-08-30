@@ -1,9 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
-import { useState } from "react";
-import type { ComponentType } from "react";
+import { usePathname, useRouter } from "next/navigation";
+import { useEffect, useState, useTransition } from "react";
+import type { ComponentType, MouseEvent } from "react";
 import {
   IconAdmins,
   IconAttendance,
@@ -59,7 +59,33 @@ export function DashboardNav({
   variant: "sidebar" | "bottom";
 }) {
   const pathname = usePathname();
+  const router = useRouter();
   const [moreOpen, setMoreOpen] = useState(false);
+  // Which destination is being loaded. A dashboard route is server-rendered, so
+  // between the tap and the new screen there was nothing at all to look at —
+  // which is what made the bar feel unresponsive. The tapped item now lights up
+  // as if it were already the current page.
+  const [target, setTarget] = useState<string | null>(null);
+  const [pending, startTransition] = useTransition();
+
+  useEffect(() => {
+    // The navigation landed (or was abandoned for another route); stop showing
+    // the old destination as loading.
+    if (!pending) setTarget(null);
+  }, [pending, pathname]);
+
+  function go(href: string, event: MouseEvent<HTMLAnchorElement>) {
+    // Leave modified clicks (new tab, middle click) to the browser.
+    if (event.defaultPrevented || event.metaKey || event.ctrlKey ||
+        event.shiftKey || event.altKey || event.button !== 0) {
+      return;
+    }
+    event.preventDefault();
+    setMoreOpen(false);
+    if (href === pathname) return;
+    setTarget(href);
+    startTransition(() => router.push(href));
+  }
 
   const items = ITEMS.filter((item) => !item.superAdminOnly || isSuperAdmin);
 
@@ -67,14 +93,16 @@ export function DashboardNav({
     return (
       <nav className="mt-8 space-y-1">
         {items.map((item) => {
-          const active = isActive(pathname, item.href);
+          const active = target === item.href || (!target && isActive(pathname, item.href));
           const Icon = item.icon;
 
           return (
             <Link
               key={item.href}
               href={item.href}
-              className={`relative flex items-center gap-3 rounded-lg px-3 py-2.5 font-display
+              onClick={(event) => go(item.href, event)}
+              aria-busy={target === item.href}
+              className={`nova-tap relative flex items-center gap-3 rounded-lg px-3 py-2.5 font-display
                 text-[11px] font-bold uppercase tracking-wider transition-all ${
                   active
                     ? "bg-nova-red/12 text-nova-red shadow-glowSoft"
@@ -114,9 +142,14 @@ export function DashboardNav({
                   <Link
                     key={item.href}
                     href={item.href}
-                    onClick={() => setMoreOpen(false)}
-                    className="flex items-center gap-2.5 rounded-xl border border-nova-border px-3 py-3
-                      font-display text-[11px] font-bold uppercase tracking-wide text-nova-text"
+                    onClick={(event) => go(item.href, event)}
+                    aria-busy={target === item.href}
+                    className={`nova-tap flex items-center gap-2.5 rounded-xl border px-3 py-3
+                      font-display text-[11px] font-bold uppercase tracking-wide ${
+                        target === item.href
+                          ? "border-nova-red/60 bg-nova-red/15 text-nova-red"
+                          : "border-nova-border text-nova-text"
+                      }`}
                   >
                     <Icon size={17} className="shrink-0 text-nova-red" />
                     <span className="truncate">{item.label}</span>
@@ -130,20 +163,29 @@ export function DashboardNav({
 
       <nav className="fixed inset-x-0 bottom-0 z-40 grid grid-cols-5 border-t border-nova-border bg-nova-surface/95 pb-[env(safe-area-inset-bottom)] backdrop-blur lg:hidden">
         {primary.map((item) => {
-          const active = isActive(pathname, item.href);
+          const loading = target === item.href;
+          // Treat the destination as current the moment it is tapped. Waiting
+          // for the route to commit is the entire delay being complained about.
+          const active = loading || (!target && isActive(pathname, item.href));
           const Icon = item.icon;
 
           return (
             <Link
               key={item.href}
               href={item.href}
-              className={`relative flex min-h-[58px] flex-col items-center justify-center gap-1 px-1
-                font-display text-[9px] font-bold uppercase tracking-wide ${
+              onClick={(event) => go(item.href, event)}
+              aria-busy={loading}
+              className={`nova-tap relative flex min-h-[58px] flex-col items-center justify-center
+                gap-1 px-1 font-display text-[9px] font-bold uppercase tracking-wide ${
                   active ? "text-nova-red" : "text-nova-muted"
                 }`}
             >
               {active && (
-                <span className="absolute inset-x-3 top-0 h-[2px] rounded-full bg-nova-red shadow-glowSoft" />
+                <span
+                  className={`absolute inset-x-3 top-0 h-[2px] rounded-full bg-nova-red shadow-glowSoft ${
+                    loading ? "animate-pulse" : ""
+                  }`}
+                />
               )}
               <Icon size={19} />
               <span>{item.label}</span>
@@ -153,7 +195,8 @@ export function DashboardNav({
 
         <button
           onClick={() => setMoreOpen((open) => !open)}
-          className={`flex min-h-[58px] flex-col items-center justify-center gap-1 font-display
+          aria-expanded={moreOpen}
+          className={`nova-tap flex min-h-[58px] flex-col items-center justify-center gap-1 font-display
             text-[9px] font-bold uppercase tracking-wide ${
               moreOpen ? "text-nova-red" : "text-nova-muted"
             }`}

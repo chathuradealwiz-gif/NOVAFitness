@@ -7,6 +7,7 @@ import { formatDateTime } from "@/lib/format";
 import type { Attendance, Member } from "@/types/database";
 import { AttendanceFilters } from "./AttendanceFilters";
 import { ExportButton } from "./ExportButton";
+import { AutoRefresh } from "@/components/AutoRefresh";
 
 const PAGE_SIZE = 50;
 
@@ -50,6 +51,7 @@ export default async function AttendancePage({
 
   return (
     <>
+      <AutoRefresh intervalSeconds={60} />
       <PageHeader
         title="Attendance"
         subtitle={`${total} event${total === 1 ? "" : "s"} between ${from} and ${to}`}

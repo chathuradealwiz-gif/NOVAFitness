@@ -13,6 +13,7 @@ import {
 import { formatDate, formatMoney } from "@/lib/format";
 import type { DashboardStats, GymSettings, Member } from "@/types/database";
 import { AttendanceTrend } from "./AttendanceTrend";
+import { AutoRefresh } from "@/components/AutoRefresh";
 
 // Numbers come from aggregate RPCs so the browser never pulls whole tables.
 export default async function DashboardPage() {
@@ -39,6 +40,7 @@ export default async function DashboardPage() {
 
   return (
     <>
+      <AutoRefresh intervalSeconds={60} />
       <PageHeader
         title="Dashboard"
         subtitle={`NOVA FITNESS · ${formatDate(new Date().toISOString())}`}

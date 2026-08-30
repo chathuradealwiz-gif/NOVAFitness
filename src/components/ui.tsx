@@ -71,8 +71,10 @@ export function PageHeader({
 }) {
   return (
     <header className="mb-6 flex flex-wrap items-start justify-between gap-3">
-      <div>
-        <h1 className="font-display text-2xl font-extrabold uppercase tracking-tight">
+      {/* min-w-0 so a long member name wraps instead of pushing the action
+          button off the side of a phone screen. */}
+      <div className="min-w-0">
+        <h1 className="font-display text-2xl font-extrabold uppercase tracking-tight break-words">
           {title}
         </h1>
         {/* Short red underscore under every page title — a small, consistent

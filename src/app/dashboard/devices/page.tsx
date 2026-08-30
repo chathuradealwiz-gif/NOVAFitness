@@ -4,6 +4,7 @@ import { EmptyState, PageHeader } from "@/components/ui";
 import { FingerprintArt } from "@/components/illustrations";
 import { formatDateTime } from "@/lib/format";
 import { DeviceHealthPanel } from "./DeviceHealth";
+import { AutoRefresh } from "@/components/AutoRefresh";
 import type { Device } from "@/types/database";
 
 // A device that has not sent a heartbeat in this window is treated as offline,
@@ -24,6 +25,7 @@ export default async function DevicesPage() {
 
   return (
     <>
+      <AutoRefresh intervalSeconds={30} />
       <PageHeader
         title="Devices"
         subtitle="Fingerprint terminals at the gym entrance"

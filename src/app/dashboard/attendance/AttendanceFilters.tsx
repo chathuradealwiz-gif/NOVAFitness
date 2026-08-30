@@ -24,7 +24,7 @@ export function AttendanceFilters({
 
   return (
     <div className="nova-card flex flex-wrap items-end gap-3">
-      <label className="flex-1">
+      <label className="min-w-[9rem] flex-1">
         <span className="nova-label">From</span>
         <input
           type="date"
@@ -35,7 +35,7 @@ export function AttendanceFilters({
         />
       </label>
 
-      <label className="flex-1">
+      <label className="min-w-[9rem] flex-1">
         <span className="nova-label">To</span>
         <input
           type="date"
@@ -46,7 +46,7 @@ export function AttendanceFilters({
         />
       </label>
 
-      <label className="flex-1">
+      <label className="min-w-[9rem] flex-1">
         <span className="nova-label">Event</span>
         <select
           className="nova-input mt-1"

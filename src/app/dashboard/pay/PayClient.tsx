@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Field, StatusPill } from "@/components/ui";
 import { Spinner } from "@/components/Loading";
+import { LinkButton, SubmitButton } from "@/components/Button";
 import { Avatar } from "@/components/Avatar";
 import {
   IconAttendance,
@@ -174,7 +175,7 @@ function MemberSearchBox({ onSelect }: { onSelect: (member: PaySearchResult) => 
               <button
                 type="button"
                 onClick={() => onSelect(member)}
-                className="flex w-full items-center gap-3 px-3 py-3 text-left transition-colors hover:bg-white/5"
+                className="nova-tap flex w-full items-center gap-3 px-3 py-3 text-left transition-colors hover:bg-white/5"
               >
                 <Avatar name={member.full_name} size={36} />
                 <span className="min-w-0 flex-1">
@@ -383,15 +384,9 @@ function PaymentForm({
       {error && <p className="text-sm text-nova-red">{error}</p>}
 
       <div className="flex gap-2">
-        <button type="submit" className="nova-btn-primary" disabled={busy}>
-          {busy ? (
-            <>
-              <Spinner size={16} /> Saving…
-            </>
-          ) : (
-            "Save Payment"
-          )}
-        </button>
+        <SubmitButton busy={busy} busyLabel={<><Spinner size={16} /> Saving…</>}>
+          Save Payment
+        </SubmitButton>
         <button type="button" className="nova-btn-ghost" onClick={onCancel} disabled={busy}>
           Cancel
         </button>
@@ -420,30 +415,30 @@ function QuickActions({
         </button>
         {/* Fingerprint and status changes live in the member profile's panels; the
             Pay page links across rather than duplicating that machinery. */}
-        <Link href={`/dashboard/members/${memberId}`} className="nova-btn-ghost">
+        <LinkButton href={`/dashboard/members/${memberId}`}>
           <IconFingerprint size={16} />
           Enroll Fingerprint
-        </Link>
-        <Link href={`/dashboard/members/${memberId}`} className="nova-btn-ghost">
+        </LinkButton>
+        <LinkButton href={`/dashboard/members/${memberId}`}>
           <IconStatus size={16} />
           Change Status
-        </Link>
-        <Link href={`/dashboard/members/${memberId}/edit`} className="nova-btn-ghost">
+        </LinkButton>
+        <LinkButton href={`/dashboard/members/${memberId}/edit`}>
           <IconEdit size={16} />
           Edit Member
-        </Link>
-        <Link href={`/dashboard/workouts/new?member=${memberId}`} className="nova-btn-ghost">
+        </LinkButton>
+        <LinkButton href={`/dashboard/workouts/new?member=${memberId}`}>
           <IconWorkout size={16} />
           Assign Workout
-        </Link>
-        <Link href={`/dashboard/meals/new?member=${memberId}`} className="nova-btn-ghost">
+        </LinkButton>
+        <LinkButton href={`/dashboard/meals/new?member=${memberId}`}>
           <IconMeal size={16} />
           Assign Meal Plan
-        </Link>
-        <Link href={`/dashboard/attendance?member=${memberId}`} className="nova-btn-ghost">
+        </LinkButton>
+        <LinkButton href={`/dashboard/attendance?member=${memberId}`}>
           <IconAttendance size={16} />
           Attendance
-        </Link>
+        </LinkButton>
       </div>
     </section>
   );

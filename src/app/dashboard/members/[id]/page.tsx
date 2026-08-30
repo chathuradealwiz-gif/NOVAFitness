@@ -15,6 +15,7 @@ import type {
   Payment,
 } from "@/types/database";
 import { MemberActions } from "./MemberActions";
+import { AutoRefresh } from "@/components/AutoRefresh";
 
 export default async function MemberDetailPage({ params }: { params: { id: string } }) {
   const session = await requireStaff();
@@ -79,6 +80,9 @@ export default async function MemberDetailPage({ params }: { params: { id: strin
 
   return (
     <>
+      {/* Attendance and fingerprint enrolment land here from the door terminal,
+          not from this browser, so a return visit must not trust the cache. */}
+      <AutoRefresh />
       <PageHeader
         title={typedMember.full_name}
         subtitle={`Member since ${formatDate(typedMember.join_date)}`}

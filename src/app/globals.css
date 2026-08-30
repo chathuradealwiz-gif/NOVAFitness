@@ -133,6 +133,18 @@
     @apply nova-btn border border-nova-border bg-white/[0.03] text-nova-text;
   }
 
+  /* Press feedback for things that are tappable but are not .nova-btn — nav
+     items, table rows, cards that act as links. Same reasoning: on a phone
+     there is no hover, and the finger hides whatever it is touching. */
+  .nova-tap {
+    @apply transition-transform;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .nova-tap:active {
+    @apply scale-[0.94];
+  }
+
   /* Indeterminate bar across the foot of a button while its action is in
      flight. The button keeps its label and stays the same size, so the row does
      not reflow under the thumb mid-press. */
