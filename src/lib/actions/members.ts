@@ -24,7 +24,11 @@ const membershipIdSchema = z
   });
 
 const memberSchema = z.object({
-  membership_id: membershipIdSchema,
+  // Optional on the form: reception signs a member up with a name and a number
+  // to call them on, and nothing else is worth blocking that. Left blank, the
+  // next free gym number is assigned server-side — it is still NOT NULL and
+  // UNIQUE in Postgres, just not something staff have to fill in.
+  membership_id: membershipIdSchema.optional().or(z.literal("")),
   full_name: z.string().trim().min(2, "Full name is required"),
   email: z.string().trim().email().optional().or(z.literal("")),
   phone: z.string().trim().min(6, "A contact number is required"),
@@ -49,9 +53,24 @@ export async function createMember(formData: FormData): Promise<ActionResult> {
   }
 
   const supabase = createClient();
+
+  // Blank means "give them the next one". Resolved here rather than in the form
+  // so it reflects the roster at the moment of insert, not at the moment the
+  // page was rendered — two people signing members up at once would otherwise
+  // both be handed the same number.
+  let fields = parsed.data;
+  if (!fields.membership_id) {
+    const { data: next } = await supabase.rpc("next_membership_id");
+    const assigned = (next as unknown as string) ?? null;
+    if (!assigned) {
+      return { ok: false, error: "Could not assign a membership number. Enter one manually." };
+    }
+    fields = { ...fields, membership_id: assigned };
+  }
+
   const { data, error } = await supabase
     .from("members")
-    .insert(clean(parsed.data))
+    .insert(clean(fields))
     .select("*")
     .single();
 
@@ -65,8 +84,8 @@ export async function createMember(formData: FormData): Promise<ActionResult> {
       return {
         ok: false,
         error: suggestion
-          ? `Membership number ${parsed.data.membership_id} is already taken. ${suggestion} is free.`
-          : `Membership number ${parsed.data.membership_id} is already taken.`,
+          ? `Membership number ${fields.membership_id} is already taken. ${suggestion} is free.`
+          : `Membership number ${fields.membership_id} is already taken.`,
         data: suggestion ? { suggestedId: suggestion } : undefined,
       };
     }

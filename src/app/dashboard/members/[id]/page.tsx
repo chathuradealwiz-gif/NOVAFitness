@@ -16,6 +16,7 @@ import type {
 } from "@/types/database";
 import { MemberActions } from "./MemberActions";
 import { AutoRefresh } from "@/components/AutoRefresh";
+import { LinkButton } from "@/components/Button";
 
 export default async function MemberDetailPage({ params }: { params: { id: string } }) {
   const session = await requireStaff();
@@ -87,10 +88,10 @@ export default async function MemberDetailPage({ params }: { params: { id: strin
         title={typedMember.full_name}
         subtitle={`Member since ${formatDate(typedMember.join_date)}`}
         action={
-          <Link href="/dashboard/members" className="nova-btn-ghost">
+          <LinkButton href="/dashboard/members">
             <IconBack size={16} />
             Back to members
-          </Link>
+          </LinkButton>
         }
       />
 
@@ -255,12 +256,12 @@ export default async function MemberDetailPage({ params }: { params: { id: strin
               ) : (
                 <ul className="space-y-2 text-sm">
                   {(attendance as Attendance[]).map((event) => (
-                    <li key={event.id} className="flex items-center justify-between gap-2">
+                    <li key={event.id} className="flex flex-wrap items-center justify-between gap-x-2">
                       <span className={event.authorized ? "" : "text-nova-red"}>
                         {event.event_type === "entry" ? "Entry" : "Exit"}
                         {!event.authorized && " · denied"}
                       </span>
-                      <span className="text-nova-muted">{formatDateTime(event.occurred_at)}</span>
+                      <span className="shrink-0 text-nova-muted">{formatDateTime(event.occurred_at)}</span>
                     </li>
                   ))}
                 </ul>

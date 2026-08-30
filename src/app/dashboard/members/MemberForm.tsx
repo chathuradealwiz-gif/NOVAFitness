@@ -27,9 +27,12 @@ export function MemberForm({
   const [busy, setBusy] = useState(false);
   // Controlled, so a clash can put the next free number straight into the field
   // and reception only has to press Save again.
-  const [membershipId, setMembershipId] = useState(
-    member?.membership_id ?? suggestedId ?? "",
-  );
+  //
+  // Blank for a new member rather than prefilled with the suggestion: the
+  // number is then chosen at insert time, which is the only moment it can be
+  // checked against the roster. Prefilling handed two people signing members up
+  // at once the same number, and the second one hit a duplicate.
+  const [membershipId, setMembershipId] = useState(member?.membership_id ?? "");
 
   // A ref rather than the `busy` state: two taps in the same tick both read the
   // pre-render value of state and both submit, which on a phone — where the
@@ -69,22 +72,10 @@ export function MemberForm({
 
   return (
     <form action={handleSubmit} className="nova-card space-y-4">
+      {/* Name and mobile are all a signup needs. They come first and are the
+          only two marked required, so reception can finish at the counter with
+          the member standing there and fill in the rest later. */}
       <div className="grid gap-4 sm:grid-cols-2">
-        <Field
-          label="Membership Number"
-          hint="The gym's official member number. Digits only, e.g. 34."
-        >
-          <input
-            name="membership_id"
-            className="nova-input font-mono"
-            inputMode="numeric"
-            required
-            value={membershipId}
-            onChange={(event) => setMembershipId(event.target.value)}
-            placeholder="34"
-          />
-        </Field>
-
         <Field label="Full Name">
           <input name="full_name" className="nova-input" required defaultValue={member?.full_name} />
         </Field>
@@ -99,43 +90,67 @@ export function MemberForm({
             defaultValue={member?.phone ?? ""}
           />
         </Field>
-
-        <Field label="Email" hint="Used to link their magic-link sign-in.">
-          <input
-            name="email"
-            type="email"
-            className="nova-input"
-            defaultValue={member?.email ?? ""}
-          />
-        </Field>
-
-        <Field label="Date of Birth">
-          <input
-            name="date_of_birth"
-            type="date"
-            className="nova-input"
-            defaultValue={member?.date_of_birth ?? ""}
-          />
-        </Field>
-
-        <Field label="Gender">
-          <select name="gender" className="nova-input" defaultValue={member?.gender ?? ""}>
-            <option value="">Not specified</option>
-            <option value="male">Male</option>
-            <option value="female">Female</option>
-            <option value="other">Other</option>
-          </select>
-        </Field>
       </div>
 
-      <Field label="Address">
-        <textarea
-          name="address"
-          rows={2}
-          className="nova-input"
-          defaultValue={member?.address ?? ""}
-        />
-      </Field>
+      <details className="rounded-xl border border-nova-border bg-nova-surface/50" open={!!member}>
+        <summary className="nova-tap cursor-pointer list-none px-4 py-3 font-display text-[11px] font-bold uppercase tracking-wider text-nova-muted">
+          Optional details
+        </summary>
+
+        <div className="space-y-4 border-t border-nova-border p-4">
+          <div className="grid gap-4 sm:grid-cols-2">
+            <Field
+              label="Membership Number"
+              hint="Left blank, the next free number is assigned automatically."
+            >
+              <input
+                name="membership_id"
+                className="nova-input font-mono"
+                inputMode="numeric"
+                value={membershipId}
+                onChange={(event) => setMembershipId(event.target.value)}
+                placeholder={suggestedId ? `${suggestedId} (next free)` : "34"}
+              />
+            </Field>
+
+            <Field label="Email" hint="Used to link their magic-link sign-in.">
+              <input
+                name="email"
+                type="email"
+                className="nova-input"
+                defaultValue={member?.email ?? ""}
+              />
+            </Field>
+
+            <Field label="Date of Birth">
+              <input
+                name="date_of_birth"
+                type="date"
+                className="nova-input"
+                defaultValue={member?.date_of_birth ?? ""}
+              />
+            </Field>
+
+            <Field label="Gender">
+              <select name="gender" className="nova-input" defaultValue={member?.gender ?? ""}>
+                <option value="">Not specified</option>
+                <option value="male">Male</option>
+                <option value="female">Female</option>
+                <option value="other">Other</option>
+              </select>
+            </Field>
+          </div>
+
+          <Field label="Address">
+            <textarea
+              name="address"
+              rows={2}
+              className="nova-input"
+              defaultValue={member?.address ?? ""}
+            />
+          </Field>
+        </div>
+      </details>
 
       {error && <p className="text-sm text-nova-red">{error}</p>}
 
