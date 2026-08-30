@@ -1,11 +1,24 @@
 import type { MemberStatus, PaymentType } from "@/types/database";
 
+/**
+ * The gym's wall clock. Timestamps are stored in UTC and the device sends UTC,
+ * but these pages render on Vercel, where the server's timezone is UTC — so
+ * without pinning this, a 12:48 PM entry was displayed as 07:16. Pinning it also
+ * keeps the server and client renders identical, which is what hydration needs.
+ */
+export const TIMEZONE = "Asia/Colombo";
+
 /** "16 Aug 2026" — the format used throughout the spec's mockups. */
 export function formatDate(value: string | null | undefined): string {
   if (!value) return "—";
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return "—";
-  return date.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
+  return date.toLocaleDateString("en-GB", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+    timeZone: TIMEZONE,
+  });
 }
 
 export function formatDateTime(value: string | null | undefined): string {
@@ -17,6 +30,7 @@ export function formatDateTime(value: string | null | undefined): string {
     month: "short",
     hour: "2-digit",
     minute: "2-digit",
+    timeZone: TIMEZONE,
   });
 }
 

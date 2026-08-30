@@ -17,6 +17,8 @@ const paymentSchema = z.object({
   period_end: z.string().optional().or(z.literal("")),
   coach_name: z.string().optional().or(z.literal("")),
   description: z.string().optional().or(z.literal("")),
+  // Idempotency key, generated once per filled-in form. See migration 0013.
+  client_token: z.string().uuid().optional().or(z.literal("")),
 });
 
 /**
@@ -45,9 +47,16 @@ export async function recordPayment(formData: FormData): Promise<ActionResult> {
     coach_name: input.coach_name || null,
     description: input.description || null,
     recorded_by: session.profile.id,
+    client_token: input.client_token || null,
   });
 
-  if (error) return { ok: false, error: error.message };
+  // 23505 on payments_client_token_key means this exact submission already
+  // landed — a double-click or a retried request, not a second payment. The
+  // money is recorded once and the caller should see success, not an error that
+  // invites staff to try again. It still falls through to revalidate, so the
+  // page shows the payment the winning request wrote.
+  const duplicate = error?.code === "23505" && error.message.includes("client_token");
+  if (error && !duplicate) return { ok: false, error: error.message };
 
   revalidatePath(`/dashboard/members/${input.member_id}`);
   revalidatePath("/dashboard/payments");

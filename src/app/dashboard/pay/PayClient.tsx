@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Field, StatusPill } from "@/components/ui";
 import { Spinner } from "@/components/Loading";
 import { Avatar } from "@/components/Avatar";
@@ -243,6 +243,10 @@ function PaymentForm({
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [resetKey, setResetKey] = useState(0);
+  const inFlight = useRef(false);
+  // One idempotency key per filled-in form; the reset that follows a saved
+  // payment mints a fresh one, so the next payment is a new token.
+  const token = useMemo(() => crypto.randomUUID(), [resetKey]);
 
   // Same prefill rule as the member profile's payment panel.
   const defaultAmount =
@@ -253,13 +257,15 @@ function PaymentForm({
         : undefined;
 
   async function handleSubmit(formData: FormData) {
-    // The submit button is disabled while busy; this guards the other submit
-    // paths (Enter key, a second click landing first) so one payment cannot be
-    // recorded twice.
-    if (busy) return;
+    // A ref, not the `busy` state: two clicks in the same tick both read the
+    // stale state and both submit. The form also carries an idempotency token
+    // so a request that still gets through twice is only recorded once.
+    if (inFlight.current) return;
+    inFlight.current = true;
 
     const amount = Number(formData.get("amount"));
     if (!Number.isFinite(amount) || amount <= 0) {
+      inFlight.current = false;
       setError("Enter a valid amount greater than zero.");
       return;
     }
@@ -270,9 +276,13 @@ function PaymentForm({
     setBusy(false);
 
     if (!result.ok) {
+      // Only a failed payment may be retried; a successful one keeps the token
+      // spent until the form resets.
+      inFlight.current = false;
       setError(result.error ?? "Could not record the payment.");
       return;
     }
+    inFlight.current = false;
 
     // Keep the member selected so another payment can be recorded for them
     // straight away; only the form fields reset.
@@ -288,6 +298,7 @@ function PaymentForm({
       className="mt-4 space-y-4 border-t border-nova-border pt-4"
     >
       <input type="hidden" name="member_id" value={memberId} />
+      <input type="hidden" name="client_token" value={token} />
       <input type="hidden" name="payment_type" value={type} />
 
       <Field label="Payment Type">

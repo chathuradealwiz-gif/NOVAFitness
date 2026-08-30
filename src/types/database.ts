@@ -63,6 +63,8 @@ export type Payment = {
   description: string | null;
   recorded_by: string | null;
   status: PaymentStatus;
+  /** Idempotency key from the recording form; null on rows written before it. */
+  client_token: string | null;
   created_at: string;
   updated_at: string;
 }

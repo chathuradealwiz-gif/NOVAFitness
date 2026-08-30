@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Field } from "@/components/ui";
 import { Spinner } from "@/components/Loading";
 import { FingerprintScan } from "@/components/FingerprintScan";
@@ -122,6 +122,10 @@ function PaymentPanel({
   const [type, setType] = useState<PaymentType>("monthly_membership");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  // A ref, not the `busy` state: two clicks in the same tick both read the old
+  // state and both submit, which is how one payment got recorded twice.
+  const inFlight = useRef(false);
+  const [token] = useState(() => crypto.randomUUID());
 
   // Prefill the configured fee for the two standard payment types.
   const defaultAmount =
@@ -132,12 +136,17 @@ function PaymentPanel({
         : undefined;
 
   async function handleSubmit(formData: FormData) {
+    if (inFlight.current) return;
+    inFlight.current = true;
     setBusy(true);
     setError(null);
     const result = await recordPayment(formData);
     setBusy(false);
 
     if (!result.ok) {
+      // Only a failed payment may be retried; a successful one keeps the token
+      // spent so a stray resubmit cannot charge the member again.
+      inFlight.current = false;
       setError(result.error ?? "Could not record the payment.");
       return;
     }
@@ -148,6 +157,7 @@ function PaymentPanel({
   return (
     <form action={handleSubmit} className="mt-4 space-y-4 border-t border-nova-border pt-4">
       <input type="hidden" name="member_id" value={member.id} />
+      <input type="hidden" name="client_token" value={token} />
 
       <div className="grid gap-4 sm:grid-cols-2">
         <Field label="Payment Type">
