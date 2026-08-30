@@ -56,16 +56,28 @@ export async function createMember(formData: FormData): Promise<ActionResult> {
     .single();
 
   if (error) {
-    return {
-      ok: false,
-      error:
-        error.code === "23505"
-          ? "That membership number is already in use."
-          : error.message,
-    };
+    if (error.code === "23505") {
+      // Tell reception which number to use rather than just refusing. The form
+      // fills this into the field, so the fix is one click away instead of a
+      // guess at what is free.
+      const { data: next } = await supabase.rpc("next_membership_id");
+      const suggestion = (next as unknown as string) ?? null;
+      return {
+        ok: false,
+        error: suggestion
+          ? `Membership number ${parsed.data.membership_id} is already taken. ${suggestion} is free.`
+          : `Membership number ${parsed.data.membership_id} is already taken.`,
+        data: suggestion ? { suggestedId: suggestion } : undefined,
+      };
+    }
+    return { ok: false, error: error.message };
   }
 
   revalidatePath("/dashboard/members");
+  // Without this the Add Member page keeps its cached render, and the next
+  // member is prefilled with the number that was just used — which is what made
+  // creating two members in a row fail on a duplicate.
+  revalidatePath("/dashboard/members/new");
   return { ok: true, data: { id: data.id } };
 }
 
@@ -117,6 +129,47 @@ export async function changeMemberStatus(
   revalidatePath(`/dashboard/members/${memberId}`);
   revalidatePath("/dashboard/members");
   return { ok: true };
+}
+
+/**
+ * Permanently deletes a member profile. Super admin only.
+ *
+ * Every piece of personal data goes, including the biometric template: the
+ * member's sensor slot is queued for erasure and the device deletes it on its
+ * next sync. What stays is the payment history — `payments.member_id` is
+ * `on delete restrict` and financial records are permanent (spec §44), so the
+ * member row survives as an anonymous stub for those receipts to point at.
+ * There is no undo.
+ */
+export async function deleteMember(memberId: string, reason: string): Promise<ActionResult> {
+  await requireStaff();
+
+  if (!reason.trim()) {
+    return { ok: false, error: "A reason is required to delete a member." };
+  }
+
+  const supabase = createClient();
+  const { data, error } = await supabase.rpc("delete_member_permanently", {
+    p_member_id: memberId,
+    p_reason: reason.trim(),
+  });
+
+  if (error) {
+    // The RPC raises 42501 for anyone who is not a super admin.
+    return {
+      ok: false,
+      error:
+        error.code === "42501"
+          ? "Only a super admin can delete a member."
+          : error.message,
+    };
+  }
+
+  revalidatePath("/dashboard/members");
+  revalidatePath("/dashboard/members/new");
+  revalidatePath(`/dashboard/members/${memberId}`);
+  revalidatePath("/dashboard");
+  return { ok: true, data };
 }
 
 /** Suggests the next free member number for the "add member" form. */

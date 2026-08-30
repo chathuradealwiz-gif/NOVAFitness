@@ -7,6 +7,10 @@ The door has to keep working when Wi-Fi does not. Two files:
                costs at most the last line.
   cache.json   the {fingerprint_id, name, allowed} list handed back by
                /device-sync. No biometric data - just the door decision.
+  erased.json  slots deleted from the sensor but not yet confirmed to the
+               server. On flash, not in RAM, so a reboot between erasing a
+               template and reporting it does not leave the server believing
+               a deleted member's fingerprint is still on the device.
 """
 
 import json
@@ -14,6 +18,7 @@ import os
 
 QUEUE_PATH = "queue.jsonl"
 CACHE_PATH = "cache.json"
+ERASED_PATH = "erased.json"
 COUNTER_PATH = "counter.txt"
 MAX_QUEUE = 500
 
@@ -123,6 +128,36 @@ class Store:
         try:
             with open(CACHE_PATH, "w") as f:
                 json.dump({str(k): v for k, v in self.cache.items()}, f)
+        except OSError:
+            pass
+
+    # --- erased slots awaiting confirmation ---------------------------------
+    def erased(self):
+        """Slots deleted from the sensor but not yet acknowledged by the server."""
+        try:
+            with open(ERASED_PATH) as f:
+                return [int(s) for s in json.load(f)]
+        except (OSError, ValueError):
+            return []
+
+    def mark_erased(self, slots):
+        """Record slots as erased. Kept until a sync round trip clears them."""
+        pending = set(self.erased())
+        pending.update(int(s) for s in slots)
+        self._write_erased(sorted(pending))
+
+    def clear_erased(self, slots):
+        """Drop the slots the server has now accepted."""
+        done = set(int(s) for s in slots)
+        self._write_erased([s for s in self.erased() if s not in done])
+
+    def _write_erased(self, slots):
+        try:
+            if slots:
+                with open(ERASED_PATH, "w") as f:
+                    json.dump(slots, f)
+            elif _exists(ERASED_PATH):
+                os.remove(ERASED_PATH)
         except OSError:
             pass
 

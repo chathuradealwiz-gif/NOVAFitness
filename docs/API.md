@@ -94,8 +94,9 @@ RTC battery in the design.
 
 ## POST /device-sync
 
-Drains the offline queue and refreshes the offline authorisation cache in one
-round trip, because 4G round trips are expensive.
+Drains the offline queue, refreshes the offline authorisation cache and carries
+the sensor-erasure instructions, all in one round trip, because 4G round trips
+are expensive.
 
 ```json
 {
@@ -103,7 +104,8 @@ round trip, because 4G round trips are expensive.
   "events": [
     { "event_id": "GYM-001-000413", "fingerprint_id": 37,
       "event_type": "entry", "timestamp": "2026-08-16T09:02:11Z" }
-  ]
+  ],
+  "erased": [41]
 }
 ```
 
@@ -116,7 +118,8 @@ Response:
   "server_time": "2026-08-16T14:30:00.000Z",
   "cache": [
     { "fingerprint_id": 37, "name": "John Perera", "allowed": true }
-  ]
+  ],
+  "erase": [52]
 }
 ```
 
@@ -125,6 +128,15 @@ as accepted. Batches are capped at 200 events; loop if the queue is longer.
 
 `cache` is the complete authorisation list for this device: store it in flash and
 use it to make the door decision while offline. It contains no biometric data.
+
+`erase` lists sensor slots whose templates must be deleted from the R503 itself,
+queued when a member profile is permanently deleted. Dropping a member from
+`cache` only makes the door say no — the template stays in the sensor's flash
+until it is told to delete the slot, and the slot is never reused until then. Call
+the sensor's delete for each one, then name them in `erased` on a later sync; a
+queue row is only closed once the device confirms it, so an erasure interrupted by
+a reset is handed back next time. A slot the sensor no longer holds counts as
+erased.
 
 ---
 

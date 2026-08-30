@@ -17,6 +17,11 @@ export function MemberForm({
   const router = useRouter();
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  // Controlled, so a clash can put the next free number straight into the field
+  // and reception only has to press Save again.
+  const [membershipId, setMembershipId] = useState(
+    member?.membership_id ?? suggestedId ?? "",
+  );
 
   async function handleSubmit(formData: FormData) {
     setBusy(true);
@@ -29,6 +34,8 @@ export function MemberForm({
     setBusy(false);
 
     if (!result.ok) {
+      const suggestion = (result.data as { suggestedId?: string } | undefined)?.suggestedId;
+      if (suggestion) setMembershipId(suggestion);
       setError(result.error ?? "Something went wrong.");
       return;
     }
@@ -49,7 +56,8 @@ export function MemberForm({
             className="nova-input font-mono"
             inputMode="numeric"
             required
-            defaultValue={member?.membership_id ?? suggestedId}
+            value={membershipId}
+            onChange={(event) => setMembershipId(event.target.value)}
             placeholder="34"
           />
         </Field>

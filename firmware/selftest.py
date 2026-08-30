@@ -46,8 +46,10 @@ def run():
     try:
         from r503 import R503
         fp = R503(cfg)
+        capacity = fp.capacity()
         count = fp.template_count()
-        line("R503 sensor", True, "%d templates stored" % count)
+        line("R503 sensor", True,
+             "%d of %d slots used, %d free" % (count, capacity, capacity - count))
         print("                       used slots: %s" % fp.used_slots())
     except Exception as e:
         line("R503 sensor", False, str(e))

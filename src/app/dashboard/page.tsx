@@ -27,6 +27,7 @@ export default async function DashboardPage() {
       supabase
         .from("members")
         .select("id, membership_id, full_name, status, next_payment_date")
+        .is("deleted_at", null)
         .not("next_payment_date", "is", null)
         .lte("next_payment_date", new Date(Date.now() + 7 * 86_400_000).toISOString().slice(0, 10))
         .order("next_payment_date")

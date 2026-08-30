@@ -3,11 +3,17 @@ import { createClient } from "@/lib/supabase/server";
 import { EmptyState, PageHeader } from "@/components/ui";
 import { FingerprintArt } from "@/components/illustrations";
 import { formatDateTime } from "@/lib/format";
+import { DeviceHealthPanel } from "./DeviceHealth";
 import type { Device } from "@/types/database";
 
 // A device that has not sent a heartbeat in this window is treated as offline,
 // regardless of the last status it reported.
 const STALE_MS = 3 * 60 * 1000;
+
+// Health arrives on the heartbeat, so a cached render of this page would show a
+// snapshot older than the one already in the database — and "Refresh" would
+// appear to do nothing.
+export const dynamic = "force-dynamic";
 
 export default async function DevicesPage() {
   await requireStaff();
@@ -75,6 +81,8 @@ export default async function DevicesPage() {
                     }
                   />
                 </dl>
+
+                <DeviceHealthPanel device={device} />
               </article>
             );
           })}

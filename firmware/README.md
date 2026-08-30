@@ -42,7 +42,7 @@ on Vercel, and nothing on the device to expose to the internet.
 | `xpt2046.py` | Touch controller, on its own SPI bus |
 | `r503.py` | Fingerprint protocol: identify, enroll, slot allocation |
 | `nova_net.py` | Wi-Fi, hand-rolled HTTPS POST, the five API calls |
-| `nova_store.py` | Offline queue + authorisation cache on flash |
+| `nova_store.py` | Offline queue, authorisation cache and pending erasures on flash |
 | `calibrate.py` | Run once, prints the `TOUCH_CAL` numbers |
 | `selftest.py` | Bring-up check, subsystem by subsystem |
 | `config.example.py` | Copy to `config.py` and fill in |
@@ -133,6 +133,20 @@ type a membership ID on the keypad and see the name, status, expiry and whether
 they would be let in. If you do want member creation at the door, it needs a new
 Edge Function that creates the member and its enrollment request in one call;
 say the word and I will add it.
+
+**Device health** — *Info → Device Health* runs the checks live rather than
+reporting cached status: it asks the sensor for its system parameters and
+template count, stats the filesystem, and reads the Wi-Fi and server state. A
+banner says `ALL CHECKS PASS` or `n FAULTS`, and any failing row is red with the
+reason on it — a sensor confirmation code, an unreachable server, the last
+unhandled error from the main loop.
+
+Sensor capacity comes from the chip's own `ReadSysPara`, not from the datasheet:
+the R503 family ships in 200- and 1000-template variants, and the firmware used
+to assume 200 everywhere. On a 1000-template unit that silently capped
+`search()` at slot 200 and read only half the index table, so members enrolled
+above it would never have matched. The health screen shows capacity, enrolled
+and free, and warns amber below ten slots left.
 
 ## Offline behaviour
 

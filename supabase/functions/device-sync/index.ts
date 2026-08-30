@@ -1,10 +1,17 @@
 // POST /functions/v1/device-sync
 //
-// Two jobs in one round trip, because 4G round trips are expensive:
+// Three jobs in one round trip, because 4G round trips are expensive:
 //   1. drain the device's offline attendance queue (idempotent, per event)
 //   2. hand back the authorisation cache the device uses while offline
+//   3. hand back the slots whose templates must be erased from the sensor
 //
 // The cache holds only { fingerprint_id, allowed, name } — no biometric data.
+//
+// (3) is how a deleted member's biometric data actually leaves the building.
+// Dropping them from the cache only makes the door say no; the template stays in
+// the sensor's flash until it is told to delete that slot. The device confirms
+// each erasure back in `erased`, and only then is the queue row closed — so a
+// device that loses power mid-erase is handed the same slot again next sync.
 
 import { authenticateDevice, corsHeaders, json, markSeen, serviceClient } from "../_shared/device.ts";
 
@@ -21,7 +28,7 @@ Deno.serve(async (req) => {
 
   const supabase = serviceClient();
 
-  let body: { device_id: string; events?: QueuedEvent[] };
+  let body: { device_id: string; events?: QueuedEvent[]; erased?: number[] };
   try {
     body = await req.json();
   } catch {
@@ -64,6 +71,28 @@ Deno.serve(async (req) => {
     if (!error || error.code === "23505") accepted.push(ev.event_id);
   }
 
+  // Close out the slots the device says it has erased, before handing back what
+  // is still outstanding.
+  const confirmed = (body.erased ?? [])
+    .filter((slot) => Number.isInteger(slot))
+    .slice(0, 200);
+
+  if (confirmed.length) {
+    await supabase
+      .from("fingerprint_erasures")
+      .update({ erased_at: new Date().toISOString() })
+      .eq("device_id", device.id)
+      .is("erased_at", null)
+      .in("fingerprint_id", confirmed);
+  }
+
+  const { data: pendingErasures } = await supabase
+    .from("fingerprint_erasures")
+    .select("fingerprint_id")
+    .eq("device_id", device.id)
+    .is("erased_at", null)
+    .limit(50);
+
   // Rebuild the offline authorisation cache for this device.
   const { data: enrolled } = await supabase
     .from("members")
@@ -88,5 +117,6 @@ Deno.serve(async (req) => {
     rejected: events.filter((e) => !accepted.includes(e.event_id)).map((e) => e.event_id),
     server_time: new Date().toISOString(),
     cache,
+    erase: (pendingErasures ?? []).map((row) => row.fingerprint_id),
   });
 });

@@ -36,6 +36,7 @@ export default async function MembersPage({
     let listQuery = supabase
       .from("members")
       .select("*", { count: "exact" })
+      .is("deleted_at", null)
       .order("created_at", { ascending: false })
       .range((page - 1) * PAGE_SIZE, page * PAGE_SIZE - 1);
 

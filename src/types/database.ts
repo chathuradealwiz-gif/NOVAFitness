@@ -46,6 +46,9 @@ export type Member = {
   fingerprint_id: number | null;
   fingerprint_device_id: string | null;
   notes: string | null;
+  /** Set when the profile was permanently deleted; the row survives only so the
+   *  member's payment history has something to point at. */
+  deleted_at: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -95,8 +98,36 @@ export type Device = {
   network_status: string | null;
   pending_events: number;
   last_sync_at: string | null;
+  health: DeviceHealth | null;
+  health_reported_at: string | null;
   created_at: string;
   updated_at: string;
+}
+
+/**
+ * Component health as the terminal last reported it on its heartbeat.
+ *
+ * Every field is optional: the device is outbound-only, so this is whatever the
+ * firmware on it happens to send. An older build reports none of it, and a
+ * sensor that will not answer reports `sensor: "error"` with nothing else.
+ */
+export type DeviceHealth = {
+  sensor?: "ok" | "error";
+  sensor_error?: string;
+  capacity?: number;
+  enrolled?: number;
+  free_slots?: number;
+  free_ram?: number;
+  total_ram?: number;
+  free_flash?: number;
+  total_flash?: number;
+  wifi?: boolean;
+  rssi?: number | null;
+  clock_synced?: boolean;
+  queue?: number;
+  pending_erasures?: number;
+  uptime_s?: number;
+  last_error?: string;
 }
 
 export type WorkoutPlan = {
@@ -281,6 +312,10 @@ export interface Database {
       void_payment: Fn<
         { p_payment_id: string; p_status: PaymentStatus; p_reason: string },
         { member_id: string }
+      >;
+      delete_member_permanently: Fn<
+        { p_member_id: string; p_reason: string },
+        { status: string; payments_retained?: number; fingerprint_queued?: boolean }
       >;
       set_user_role: Fn<{ p_profile_id: string; p_role: UserRole }, { role: UserRole }>;
       set_profile_active: Fn<

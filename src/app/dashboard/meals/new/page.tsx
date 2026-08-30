@@ -18,6 +18,7 @@ export default async function NewMealPlanPage({
     .from("members")
     .select("id, full_name, membership_id")
     .eq("id", searchParams.member)
+    .is("deleted_at", null)
     .maybeSingle();
 
   if (!member) notFound();

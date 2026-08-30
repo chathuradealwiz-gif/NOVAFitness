@@ -214,13 +214,22 @@ class SupabaseDevice:
         return bytes(out)
 
     # --- API (docs/API.md) --------------------------------------------------
-    def heartbeat(self, pending=0):
-        data = self._post("device-heartbeat", {
+    def heartbeat(self, pending=0, health=None):
+        """Liveness plus, when given, a component health snapshot.
+
+        The dashboard cannot reach the terminal - the device is outbound-only
+        behind the gym's router - so the heartbeat is the only channel health
+        can travel on. It rides along rather than taking its own round trip.
+        """
+        payload = {
             "device_id": self.device_code,
             "firmware_version": self.firmware,
             "network_status": self.wifi.status_text(),
             "pending_events": pending,
-        })
+        }
+        if health:
+            payload["health"] = health
+        data = self._post("device-heartbeat", payload)
         server_time = data.get("server_time")
         if server_time:
             self.set_clock(server_time)
@@ -237,10 +246,18 @@ class SupabaseDevice:
             "offline": offline,
         })
 
-    def sync(self, events):
+    def sync(self, events, erased=None):
+        """Drain the queue, refresh the cache, and confirm sensor erasures.
+
+        `erased` is the slots deleted from the sensor since the last sync. They
+        are reported here rather than one call per slot, and the server only
+        closes a queue row once it is named — so a reset mid-erase just means
+        the slot comes back on the next sync.
+        """
         return self._post("device-sync", {
             "device_id": self.device_code,
             "events": events[:200],       # the function caps the batch anyway
+            "erased": (erased or [])[:200],
         })
 
     def poll_enrollment(self):

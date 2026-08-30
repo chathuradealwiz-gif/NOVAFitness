@@ -28,6 +28,7 @@ _DELETE = 0x0C
 _EMPTY = 0x0D
 _TEMPLATE_NUM = 0x1D
 _READ_INDEX = 0x1F
+_READ_SYS_PARA = 0x0F
 _AURA = 0x35
 
 # Confirmation codes worth naming
@@ -49,6 +50,9 @@ RED = 0x01
 BLUE = 0x02
 PURPLE = 0x03
 
+# Fallback only. The real figure comes from the sensor's own system parameters
+# (ReadSysPara): the R503 family ships in 200- and 1000-template variants, and
+# the datasheet figure for one is wrong for the other. capacity() asks the chip.
 MAX_SLOTS = 200
 
 
@@ -70,6 +74,8 @@ class R503:
             rx=cfg.PIN_FP_RX,
             timeout=1000
         )
+        # Filled on first use from ReadSysPara.
+        self._capacity = None
 
     # --- transport ----------------------------------------------------------
 
@@ -244,8 +250,18 @@ class R503:
             "img2tz"
         )
 
-    def search(self, buffer_id=1, start=0, count=MAX_SLOTS):
-        """Returns (page_id, score) or None when no match."""
+    def search(self, buffer_id=1, start=0, count=None):
+        """Returns (page_id, score) or None when no match.
+
+        The range searched is the sensor's real library size, not the assumed
+        200: on a 1000-template variant a hardcoded 200 would silently refuse
+        every member enrolled into a slot above it.
+        """
+        if count is None:
+            try:
+                count = self.capacity()
+            except (FingerprintError, OSError):
+                count = MAX_SLOTS
 
         payload = bytes([
             _SEARCH,
@@ -304,6 +320,32 @@ class R503:
             3000
         )
 
+    def sys_params(self):
+        """ReadSysPara: the sensor's own account of itself.
+
+        16 bytes, big-endian: status register, system id, library size, security
+        level, device address, packet size code, baud rate code. The library
+        size is the only honest answer to "how many prints fit" - it is what the
+        chip enforces, not what a datasheet claims.
+        """
+        rest = self._expect(bytes([_READ_SYS_PARA]), "sys_para")
+        if len(rest) < 16:
+            raise OSError("R503 short sys_para")
+        return {
+            "status": (rest[0] << 8) | rest[1],
+            "capacity": (rest[4] << 8) | rest[5],
+            "security": (rest[6] << 8) | rest[7],
+            # Packet size is an index into 32/64/128/256 bytes, not a length.
+            "packet": 32 << (((rest[12] << 8) | rest[13]) & 0x03),
+            "baud": (((rest[14] << 8) | rest[15]) & 0xFF) * 9600,
+        }
+
+    def capacity(self):
+        """Template slots this sensor actually has. Cached; asked once."""
+        if self._capacity is None:
+            self._capacity = self.sys_params()["capacity"] or MAX_SLOTS
+        return self._capacity
+
     def template_count(self):
         rest = self._expect(
             bytes([_TEMPLATE_NUM]),
@@ -317,7 +359,15 @@ class R503:
 
         used = []
 
-        for page in range(2):
+        # One index page covers 256 slots. Two was right for a 200-template
+        # sensor and half the story on a 1000-template one, so ask how many the
+        # library actually needs.
+        try:
+            pages = min(4, (self.capacity() + 255) // 256)
+        except (FingerprintError, OSError):
+            pages = 2
+
+        for page in range(pages):
             try:
                 table = self._expect(
                     bytes([
@@ -341,11 +391,16 @@ class R503:
         return used
 
     def free_slot(self):
-        """Lowest unused page id."""
+        """Lowest unused page id, or None when the sensor is full."""
 
         used = set(self.used_slots())
 
-        for i in range(1, MAX_SLOTS):
+        try:
+            limit = self.capacity()
+        except (FingerprintError, OSError):
+            limit = MAX_SLOTS
+
+        for i in range(1, limit):
             if i not in used:
                 return i
 

@@ -21,6 +21,9 @@ import time
 HEADER_H = 44
 FOOTER_H = 24
 
+# Health rows that fit between the verdict banner and the buttons.
+ROWS_PER_SCREEN = 13
+
 # Whoever is standing at the door reads this once and never again, so it is
 # sized like a watermark rather than a credit line.
 AUTHOR = "by Pasan Weerasinghe"
@@ -78,6 +81,7 @@ class UI:
         self._band = None          # current scan band row
         self._phase = 0            # finger-on-sensor phase
         self._fill = 0             # enrollment fill percent already painted
+        self._clock_text = None    # last clock string painted on the home screen
         self._ticks = 0
 
     # --- chrome -------------------------------------------------------------
@@ -126,24 +130,93 @@ class UI:
         self.d.fill_rect(0, 224, WIDTH, 10, BLACK)
         self.d.text_center(line.upper()[:26], 224, MUTED, BLACK, 1, 1)
 
-    def home(self, buttons, hint="Place finger to sign in"):
+    def home(self, buttons, hint="Place finger to sign in", clock="", date=""):
         d = self.d
         self.header()
         self.body()
+        # The clock is what members look at while they wait, so it gets the top
+        # of the screen and the largest type on the terminal.
+        d.round_frame(12, 54, WIDTH - 24, 62, CARD, BORDER, r=10)
+        self._clock_text = None
+        self.clock(clock, date)
         # Scan card: the primary affordance, with the red accent rail on the
         # left edge that .nova-card-accent gives the "today" cards on the web.
-        d.round_frame(12, 58, WIDTH - 24, 116, CARD, BORDER, r=10)
-        d.fill_rect(14, 72, 3, 88, RED)
-        self.label("Fingerprint", 28, 74)
-        d.text("READY", 28, 92, TEXT, CARD, 3, 3)
-        for i, line in enumerate(d.wrap(hint, 19)[:2]):
-            d.text(line, 28, 132 + i * 12, MUTED, CARD, 1, 0)
+        d.round_frame(12, 124, WIDTH - 24, 104, CARD, BORDER, r=10)
+        d.fill_rect(14, 138, 3, 76, RED)
+        self.label("Fingerprint", 28, 140)
+        d.text("READY", 28, 158, TEXT, CARD, 3, 3)
+        for i, line in enumerate(d.wrap(hint, 17)[:2]):
+            d.text(line, 28, 194 + i * 12, MUTED, CARD, 1, 0)
         # The fingerprint mark sits inside the card, on the red rail's side of
         # the panel, so "READY" and the thing you press are one object.
-        self.fp_small.draw(d, 180, 88, RED)
+        self.fp_small.draw(d, 180, 152, RED)
         for b in buttons:
             b.draw(d)
-        self.watermark(222)
+        self.watermark(286)
+
+    def clock(self, text, date=""):
+        """Repaint just the clock, so the minute can tick over without the home
+        screen being redrawn under a member's finger."""
+        if text == self._clock_text:
+            return
+        self._clock_text = text
+        d = self.d
+        d.fill_rect(16, 58, WIDTH - 32, 54, CARD)
+        if text:
+            d.text_center(text, 62, TEXT, CARD, 4, 4)
+            if date:
+                d.text_center(date.upper()[:26], 100, MUTED, CARD, 1, 1)
+        else:
+            # No clock until the first heartbeat: the board has no RTC battery,
+            # and a wrong time is worse than none on the screen members read.
+            d.text_center("NOVA FITNESS", 76, MUTED, CARD, 2, 2)
+
+    # --- info / admin -------------------------------------------------------
+    def info(self, buttons):
+        """Staff actions, one tap off the home screen. Members see a red INFO
+        button and nothing else; the admin actions live behind it."""
+        d = self.d
+        self.header("Info")
+        self.body()
+        d.round_frame(12, 58, WIDTH - 24, 74, CARD, BORDER, r=10)
+        d.fill_rect(14, 72, 3, 46, RED)
+        self.label("Staff", 28, 74)
+        for i, line in enumerate(d.wrap("Admin actions for this terminal.", 24)[:2]):
+            d.text(line, 28, 94 + i * 12, MUTED, CARD, 1, 0)
+        for b in buttons:
+            b.draw(d)
+
+    def health(self, rows, faults, buttons):
+        """Diagnostics: a verdict banner, then one line per check.
+
+        The banner exists so the answer to "is it broken?" does not require
+        reading fifteen rows: green and a count, or red and the first fault
+        named. The rows below are the detail for whoever has to fix it.
+        """
+        d = self.d
+        self.header("Device Health", RED if faults else GREEN)
+        self.body()
+
+        accent = RED if faults else GREEN
+        d.round_frame(12, 48, WIDTH - 24, 22, CARD, accent, r=8)
+        if faults:
+            banner = "%d FAULT%s" % (len(faults), "" if len(faults) == 1 else "S")
+        else:
+            banner = "ALL CHECKS PASS"
+        d.text_center(banner, 55, accent, CARD, 1, 2)
+
+        # 12px pitch is what makes every check fit between the banner and the
+        # buttons. Paging through diagnostics while standing at a broken door is
+        # its own small punishment, so the whole list is on one screen.
+        d.round_frame(12, 74, WIDTH - 24, 170, CARD, BORDER, r=10)
+        y = 80
+        for label, value, color in rows[:ROWS_PER_SCREEN]:
+            d.text(label.upper()[:10], 24, y, MUTED, CARD, 1, 1)
+            d.text(str(value)[:13], 118, y, color, CARD, 1, 0)
+            y += 12
+
+        for b in buttons:
+            b.draw(d)
 
     # --- fingerprint scan ---------------------------------------------------
     def scan(self, title="Scanning", detail="Place your finger on the sensor"):
@@ -183,7 +256,9 @@ class UI:
         Function call both block, so anything moving here would only freeze
         part-way through and look broken."""
         d = self.d
-        self.header(title)
+        # The wordmark, not the screen title, in the header: a member looking up
+        # mid-scan should see whose door this is. "READING" is on the card.
+        self.header()
         self.body()
         d.round_frame(12, 70, WIDTH - 24, 150, CARD, BORDER, r=10)
         self.fp_large.draw(d, 82, 92, RED)

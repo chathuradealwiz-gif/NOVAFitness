@@ -15,7 +15,7 @@ import {
   IconStatus,
   IconWorkout,
 } from "@/components/icons";
-import { changeMemberStatus } from "@/lib/actions/members";
+import { changeMemberStatus, deleteMember } from "@/lib/actions/members";
 import { recordPayment } from "@/lib/actions/payments";
 import { cancelEnrollment, removeFingerprint, requestEnrollment } from "@/lib/actions/fingerprint";
 import { PAYMENT_TYPE_LABELS } from "@/lib/format";
@@ -28,7 +28,7 @@ import type {
   PaymentType,
 } from "@/types/database";
 
-type Panel = "payment" | "status" | "fingerprint" | null;
+type Panel = "payment" | "status" | "fingerprint" | "delete" | null;
 
 export function MemberActions({
   member,
@@ -98,7 +98,106 @@ export function MemberActions({
           onDone={() => setPanel(null)}
         />
       )}
+      {panel === "delete" && (
+        <DeletePanel member={member} onDone={() => setPanel(null)} />
+      )}
+
+      {/* Destructive and irreversible, so it sits apart from the working
+          actions rather than in the same row as "Edit Member". */}
+      {isSuperAdmin && panel !== "delete" && member.deleted_at === null && (
+        <div className="mt-4 border-t border-nova-border pt-4">
+          <button
+            className="text-xs font-medium text-nova-red transition-opacity hover:opacity-80"
+            onClick={() => setPanel("delete")}
+          >
+            Delete this profile permanently
+          </button>
+        </div>
+      )}
     </section>
+  );
+}
+
+function DeletePanel({ member, onDone }: { member: Member; onDone: () => void }) {
+  const router = useRouter();
+  const [reason, setReason] = useState("");
+  const [typed, setTyped] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const inFlight = useRef(false);
+
+  // Typing the membership number is the confirmation. A yes/no dialog is too
+  // easy to click through for something with no undo.
+  const armed = typed.trim() === member.membership_id && reason.trim().length > 0;
+
+  async function run() {
+    if (inFlight.current || !armed) return;
+    inFlight.current = true;
+    setBusy(true);
+    setError(null);
+
+    const result = await deleteMember(member.id, reason);
+
+    if (!result.ok) {
+      inFlight.current = false;
+      setBusy(false);
+      setError(result.error ?? "Could not delete this member.");
+      return;
+    }
+    // The profile is gone; there is nothing left on this page to return to.
+    router.push("/dashboard/members");
+    router.refresh();
+  }
+
+  return (
+    <div className="mt-4 space-y-4 rounded-xl border border-nova-red/40 bg-nova-red/5 p-4">
+      <div>
+        <p className="text-sm font-semibold text-nova-red">Delete this profile permanently</p>
+        <p className="mt-1 text-xs text-nova-muted">This cannot be undone.</p>
+      </div>
+
+      <ul className="space-y-1 text-xs text-nova-muted">
+        <li>• Name, contact details, address and notes are erased.</li>
+        <li>
+          • The fingerprint is deleted from the sensor itself on the device&apos;s next sync — not
+          just unassigned.
+        </li>
+        <li>• Workout and meal plans are deleted; attendance history is kept, unnamed.</li>
+        <li>
+          • Payments are <strong>kept</strong>, so finance reports stay correct. Member number{" "}
+          {member.membership_id} stays reserved.
+        </li>
+      </ul>
+
+      <Field label="Reason" hint="Recorded in the audit log.">
+        <input
+          className="nova-input"
+          value={reason}
+          onChange={(event) => setReason(event.target.value)}
+          placeholder="e.g. Member requested their data be removed"
+        />
+      </Field>
+
+      <Field label={`Type ${member.membership_id} to confirm`}>
+        <input
+          className="nova-input font-mono"
+          value={typed}
+          onChange={(event) => setTyped(event.target.value)}
+          placeholder={member.membership_id}
+        />
+      </Field>
+
+      {error && <p className="text-sm text-nova-red">{error}</p>}
+
+      <div className="flex gap-2">
+        <button className="nova-btn-primary" onClick={run} disabled={!armed || busy}>
+          {busy ? (<><Spinner size={16} /> Deleting…</>) : "Delete permanently"}
+        </button>
+        <button className="nova-btn-ghost" onClick={onDone} disabled={busy}>
+          Cancel
+        </button>
+      </div>
+    </div>
   );
 }
 

@@ -67,8 +67,13 @@ export async function cancelEnrollment(requestId: string, memberId: string): Pro
 
 /**
  * Unassigns the biometric slot. The member row and all historical attendance stay
- * (spec §60) — only the mapping is cleared. Deleting the template from the sensor
- * itself happens on the device's next sync.
+ * (spec §60) — only the mapping is cleared.
+ *
+ * This does NOT erase the template from the sensor: the finger stops opening the
+ * door (device-sync drops it from the authorisation cache) but the template stays
+ * in the R503's flash and the slot is not reused. Erasing it is what the
+ * fingerprint_erasures queue does, and only deleting the profile enqueues one —
+ * the assumption being that an unassign is usually a re-enrollment.
  */
 export async function removeFingerprint(memberId: string): Promise<ActionResult> {
   await requireStaff();

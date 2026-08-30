@@ -13,17 +13,23 @@ from the cached list and the event is queued for the next sync.
 
 from machine import Pin, PWM
 import sys
+import os
 import time
 import gc
 
 import config as cfg
-from nova_display import RED, GREEN, AMBER, MUTED
+from nova_display import RED, GREEN, AMBER, MUTED, TEXT
 from nova_ui import UI, Button
 from xpt2046 import Touch
 from r503 import R503, FingerprintError, AURA_BREATHE, AURA_FLASH, AURA_OFF, BLUE, PURPLE
 from r503 import RED as AURA_RED
 from nova_net import WiFi, SupabaseDevice, NetworkError, iso_now
 from nova_store import Store
+
+
+DAYS = ("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")
+MONTHS = ("Jan", "Feb", "Mar", "Apr", "May", "Jun",
+          "Jul", "Aug", "Sep", "Oct", "Nov", "Dec")
 
 
 def button_at(buttons, pos):
@@ -108,15 +114,53 @@ class Terminal:
         self.last_heartbeat = 0
         self.last_poll = 0
         self._since_gc = 0
+        # Set whenever show_home() runs, so a nested screen can tell that
+        # something underneath it (an enrollment started from the dashboard)
+        # has already returned the terminal to the home screen.
+        self.home_shown = False
+        # Last unhandled error from the main loop, surfaced on the health
+        # screen: the one thing you want when the door misbehaved an hour ago.
+        self.last_error = ""
+        self.boot_ticks = time.ticks_ms()
         self.buttons = self._home_buttons()
 
     # --- layout -------------------------------------------------------------
     def _home_buttons(self):
-        """One button only. Signing in needs no button - the idle loop watches
-        the sensor - so the only thing staff ever has to press is enrollment."""
+        """One button only, and it is not an admin action.
+
+        Signing in needs no button - the idle loop watches the sensor - so the
+        home screen belongs to the member: the clock, the scan prompt, and Info.
+        Enrollment moved behind Info so a member cannot start it by accident.
+        """
         return [
-            Button("Add New User", 12, 240, 216, 44, primary=True, key="ENROLL"),
+            Button("Info", 12, 240, 216, 44, primary=True, key="INFO"),
         ]
+
+    def _info_buttons(self):
+        return [
+            Button("Add New User", 12, 148, 216, 44, primary=True, key="ENROLL"),
+            Button("Device Health", 12, 200, 216, 44, key="HEALTH"),
+            Button("Back", 12, 252, 216, 40, key="BACK"),
+        ]
+
+    # --- clock --------------------------------------------------------------
+    def local_time(self):
+        """(HH:MM, "Sat 30 Aug") in gym time, or ("", "") before the first sync.
+
+        The RTC is set from the server in UTC and the board has no battery for
+        it, so the offset is applied here rather than stored in the clock.
+        """
+        if not self.api.clock_synced:
+            return "", ""
+        offset = getattr(cfg, "TZ_OFFSET_MINUTES", 330)
+        t = time.localtime(time.time() + offset * 60)
+        return ("%02d:%02d" % (t[3], t[4]),
+                "%s %d %s" % (DAYS[t[6]], t[2], MONTHS[t[1] - 1]))
+
+    def update_clock(self):
+        """Called from the home screen's idle pass; repaints only on a change."""
+        clock, date = self.local_time()
+        self.ui.clock(clock, date)
 
     def footer_text(self):
         net = "ONLINE" if self.online else "OFFLINE"
@@ -125,7 +169,9 @@ class Terminal:
         return "%s  %s%s" % (cfg.DEVICE_CODE, net, tail)
 
     def show_home(self, hint="Place finger to sign in"):
-        self.ui.home(self.buttons, hint)
+        self.home_shown = True
+        clock, date = self.local_time()
+        self.ui.home(self.buttons, hint, clock, date)
         self.ui.footer(self.footer_text())
         self.fp.aura(AURA_BREATHE, BLUE, 100)
 
@@ -135,7 +181,7 @@ class Terminal:
         if self.wifi.connect():
             self.ui.status_line("Contacting NOVA")
             try:
-                self.api.heartbeat(self.store.pending())
+                self.api.heartbeat(self.store.pending(), self.health_snapshot())
                 self.online = True
                 self.last_heartbeat = time.ticks_ms()
                 self.ui.status_line("Syncing members")
@@ -153,14 +199,45 @@ class Terminal:
     def do_sync(self):
         """Drain the queue and refresh the offline cache in one round trip."""
         events = self.store.queued(200)
-        data = self.api.sync(events)
+        reported = self.store.erased()
+        data = self.api.sync(events, reported)
         accepted = data.get("accepted", [])
         if accepted:
             self.store.drop(accepted)
+        # Only once the response is in hand: a failed post raises, and the
+        # confirmations stay on flash for the next attempt.
+        if reported:
+            self.store.clear_erased(reported)
         if data.get("cache") is not None:
             self.store.save_cache(data["cache"])
         if data.get("server_time"):
             self.api.set_clock(data["server_time"])
+        self.erase_slots(data.get("erase") or [])
+
+    def erase_slots(self, slots):
+        """Delete the templates the dashboard asked us to erase.
+
+        A deleted member's biometric data only really leaves the gym here: the
+        template sits in the sensor's own flash, and dropping them from the
+        authorisation cache would just make the door say no while the print
+        stayed on the device.
+
+        Confirmations are held on flash and sent with the next sync, so an
+        erasure is never lost to a reboot between deleting and reporting. A slot
+        the sensor no longer holds counts as erased - that is the desired end
+        state, and retrying it forever would block the rest of the queue.
+        """
+        done = []
+        for slot in slots:
+            try:
+                self.fp.delete(int(slot))
+                done.append(int(slot))
+            except FingerprintError:
+                done.append(int(slot))       # already gone
+            except OSError:
+                break                        # sensor busy; try again next sync
+        if done:
+            self.store.mark_erased(done)
 
     def tick(self):
         """Timed background work. Never raises into the main loop."""
@@ -168,7 +245,7 @@ class Terminal:
         if time.ticks_diff(now, self.last_heartbeat) > cfg.HEARTBEAT_SECONDS * 1000:
             self.last_heartbeat = now
             try:
-                self.api.heartbeat(self.store.pending())
+                self.api.heartbeat(self.store.pending(), self.health_snapshot())
                 was_offline = not self.online
                 self.online = True
                 if was_offline or self.store.pending():
@@ -377,6 +454,214 @@ class Terminal:
             return
         self.run_enrollment(enrollment)
 
+    # --- info / health ------------------------------------------------------
+    def info_screen(self):
+        """The admin menu behind the home screen's Info button.
+
+        A nested loop rather than a state in run(), matching how the keypad
+        already works - but it still calls tick(), so heartbeats and the
+        enrollment poll keep running while someone stands here reading.
+        """
+        buttons = self._info_buttons()
+        self.ui.info(buttons)
+        self.ui.footer(self.footer_text())
+        self.home_shown = False
+
+        while True:
+            try:
+                self.tick()
+            except Exception:
+                pass
+
+            # tick() can run an enrollment the dashboard requested, which ends
+            # on the home screen. Without this the loop would keep matching taps
+            # against Info's buttons over a screen that no longer shows them.
+            if self.home_shown:
+                return
+
+            pos = self.touch.position()
+            if pos is None:
+                time.sleep_ms(30)
+                continue
+
+            hit = button_at(buttons, pos)
+            if hit is None:
+                self.touch.wait_release()
+                continue
+
+            self.buzzer.tap()
+            self.ui.flash(hit, self.touch)
+
+            if hit.key == "BACK":
+                self.show_home()
+                return
+            if hit.key == "ENROLL":
+                # Returns to the home screen itself, whatever the outcome.
+                self.enroll_pressed()
+                return
+            if hit.key == "HEALTH":
+                self.health_screen()
+                if self.home_shown:
+                    return
+                # Back to the menu the staff member came from.
+                self.ui.info(buttons)
+                self.ui.footer(self.footer_text())
+                self.home_shown = False
+
+    def health_snapshot(self):
+        """Live probe of every component, as plain data.
+
+        One source of truth for both readers: the terminal's own health screen
+        renders it, and the heartbeat ships it to the dashboard. Probing twice
+        would let the screen and the web app disagree about the same second.
+        """
+        snap = {}
+
+        # capacity() proves the sensor link end to end: a real command with a
+        # 16-byte reply, not just "the UART did not error".
+        try:
+            capacity = self.fp.capacity()
+            enrolled = self.fp.template_count()
+            snap["sensor"] = "ok"
+            snap["capacity"] = capacity
+            snap["enrolled"] = enrolled
+            snap["free_slots"] = capacity - enrolled
+        except FingerprintError as e:
+            snap["sensor"] = "error"
+            snap["sensor_error"] = "Err 0x%02X" % e.code
+        except OSError as e:
+            # Almost always the wiring or the baud rate, so name it plainly.
+            snap["sensor"] = "error"
+            snap["sensor_error"] = str(e)[:40] or "No reply"
+
+        gc.collect()
+        snap["free_ram"] = gc.mem_free()
+        snap["total_ram"] = gc.mem_free() + gc.mem_alloc()
+
+        try:
+            st = os.statvfs("/")
+            snap["free_flash"] = st[0] * st[3]
+            snap["total_flash"] = st[0] * st[2]
+        except OSError:
+            pass
+
+        snap["wifi"] = self.wifi.connected()
+        snap["rssi"] = self.wifi.rssi()
+        snap["clock_synced"] = self.api.clock_synced
+        snap["queue"] = self.store.pending()
+        snap["pending_erasures"] = len(self.store.erased())
+        # ticks_diff handles the counter wrap; beyond ~12 days it is wrong, and
+        # a terminal up that long is not the case anyone is debugging.
+        snap["uptime_s"] = time.ticks_diff(time.ticks_ms(), self.boot_ticks) // 1000
+        if self.last_error:
+            snap["last_error"] = self.last_error[:120]
+        return snap
+
+    def health_rows(self, snap=None):
+        """Render a snapshot as (label, value, colour) rows, plus the faults."""
+        if snap is None:
+            snap = self.health_snapshot()
+
+        rows = []
+        faults = []
+
+        def fail(label, value):
+            faults.append("%s: %s" % (label, value))
+            rows.append((label, value, RED))
+
+        if snap.get("sensor") == "ok":
+            free = snap["free_slots"]
+            rows.append(("Sensor", "OK", GREEN))
+            rows.append(("Capacity", "%d slots" % snap["capacity"], TEXT))
+            rows.append(("Enrolled", "%d prints" % snap["enrolled"], TEXT))
+            # Amber before it bites: enrollment fails outright at zero free.
+            rows.append(("Free", "%d left" % free,
+                         RED if free <= 0 else AMBER if free < 10 else GREEN))
+        else:
+            fail("Sensor", snap.get("sensor_error", "No reply")[:13])
+
+        free_ram = snap.get("free_ram", 0)
+        rows.append(("Memory", "%d KB" % (free_ram // 1024),
+                     RED if free_ram < 16000 else AMBER if free_ram < 40000 else GREEN))
+
+        if "free_flash" in snap:
+            free_fs = snap["free_flash"]
+            rows.append(("Flash", "%d KB" % (free_fs // 1024),
+                         RED if free_fs < 20000 else GREEN))
+        else:
+            fail("Flash", "Unreadable")
+
+        # The display and touch panel cannot be probed over a bus - but you are
+        # reading this row on the display, and you pressed a button to get here,
+        # so both are proven by the fact that this screen is in front of you.
+        rows.append(("Display", "OK", GREEN))
+        rows.append(("Touch", "OK", GREEN))
+
+        if snap.get("wifi"):
+            rows.append(("Wi-Fi", self.wifi.status_text().replace("WiFi ", ""), GREEN))
+        else:
+            fail("Wi-Fi", "Offline")
+
+        if self.online:
+            rows.append(("Server", "Online", GREEN))
+        else:
+            fail("Server", "Unreachable")
+
+        clock, _ = self.local_time()
+        if clock:
+            rows.append(("Clock", clock, GREEN))
+        else:
+            fail("Clock", "Not set")
+
+        pending = snap.get("queue", 0)
+        rows.append(("Queue", "%d events" % pending, AMBER if pending else GREEN))
+
+        if snap.get("last_error"):
+            fail("Last error", snap["last_error"][:13])
+
+        return rows, faults
+
+    def health_screen(self):
+        # Side by side: the checks fill the screen, leaving one button row.
+        buttons = [
+            Button("Re-check", 12, 250, 105, 40, key="REFRESH"),
+            Button("Back", 123, 250, 105, 40, key="BACK"),
+        ]
+        rows, faults = self.health_rows()
+        self.ui.health(rows, faults, buttons)
+        self.ui.footer(self.footer_text())
+        self.home_shown = False
+
+        while True:
+            try:
+                self.tick()
+            except Exception:
+                pass
+
+            # Same as in info_screen: an enrollment may have taken the screen.
+            if self.home_shown:
+                return
+
+            pos = self.touch.position()
+            if pos is None:
+                time.sleep_ms(30)
+                continue
+
+            hit = button_at(buttons, pos)
+            if hit is None:
+                self.touch.wait_release()
+                continue
+
+            self.buzzer.tap()
+            self.ui.flash(hit, self.touch)
+
+            if hit.key == "BACK":
+                return
+            if hit.key == "REFRESH":
+                rows, faults = self.health_rows()
+                self.ui.health(rows, faults, buttons)
+                self.ui.footer(self.footer_text())
+
     # --- member lookup ------------------------------------------------------
     def lookup(self):
         buttons = self.ui.keypad_buttons()
@@ -461,11 +746,15 @@ class Terminal:
                     if hit is not None:
                         self.buzzer.tap()
                         self.ui.flash(hit, self.touch)
-                        if hit.key == "ENROLL":
-                            self.enroll_pressed()
+                        if hit.key == "INFO":
+                            self.info_screen()
                     else:
                         self.touch.wait_release()
                     continue
+
+                # Only the home screen reaches this point — every other screen
+                # runs its own loop — so this is where the clock ticks over.
+                self.update_clock()
 
                 # Idle: a finger on the sensor signs in without touching anything.
                 try:
@@ -506,6 +795,9 @@ class Terminal:
                 # The screen only has room for str(e); the console gets the
                 # traceback, which is the only thing that names the failing line.
                 sys.print_exception(e)
+                # Kept for the health screen: by the time anyone is called out
+                # to look at the terminal, this message is long off the screen.
+                self.last_error = str(e)
                 try:
                     self.ui.message("Error", str(e)[:80], RED)
                     self.hold(4000)

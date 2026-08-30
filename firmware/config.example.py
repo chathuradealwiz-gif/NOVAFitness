@@ -20,6 +20,11 @@ DEVICE_KEY = "PASTE_THE_KEY_PRINTED_BY_PROVISION_DEVICE"
 
 FIRMWARE_VERSION = "1.0.0"
 
+# Minutes ahead of UTC, for the clock on the home screen. The RTC is set from
+# the server in UTC (there is no RTC battery), so the offset is applied when the
+# time is displayed. Sri Lanka is UTC+5:30.
+TZ_OFFSET_MINUTES = 330
+
 # --- Hardware ---------------------------------------------------------------
 # Kept exactly as the tested arrangement in ESP32_S3_R503_TFT_Pin_Arrangement.md.
 PIN_FP_TX = 17          # ESP32 TX -> R503 RX
