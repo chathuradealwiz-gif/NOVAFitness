@@ -23,6 +23,17 @@ export default async function DevicesPage() {
   const { data } = await supabase.from("devices").select("*").order("device_code");
   const devices = (data ?? []) as Device[];
 
+  // How many enrolled members could survive losing a sensor. The view carries
+  // no template bytes — only whether each member has one — because staff need
+  // the count, not the biometrics.
+  const { data: backups } = await supabase
+    .from("fingerprint_backup_status")
+    .select("member_id, backed_up");
+
+  const enrolled = backups?.length ?? 0;
+  const protectedCount = backups?.filter((b) => b.backed_up).length ?? 0;
+  const unprotected = enrolled - protectedCount;
+
   return (
     <>
       <AutoRefresh intervalSeconds={30} />
@@ -30,6 +41,30 @@ export default async function DevicesPage() {
         title="Devices"
         subtitle="Fingerprint terminals at the gym entrance"
       />
+
+      {/* The sensor's flash is otherwise the only copy of a member's
+          fingerprint, and it cannot be regenerated from anything else here —
+          an unbacked member is one whose print is lost with the hardware. */}
+      {enrolled > 0 && (
+        <div
+          className={`mb-4 rounded-lg border p-3 text-sm ${
+            unprotected > 0
+              ? "border-amber-500/30 bg-amber-500/10 text-amber-300"
+              : "border-emerald-500/30 bg-emerald-500/10 text-emerald-400"
+          }`}
+        >
+          <span className="font-medium">
+            {unprotected > 0
+              ? `${unprotected} of ${enrolled} fingerprints are not backed up`
+              : `All ${enrolled} fingerprints are backed up`}
+          </span>
+          <p className="mt-1 text-xs opacity-80">
+            {unprotected > 0
+              ? "These members would have to enrol again if the sensor were replaced. The terminal retries uploads on every sync — if the count stays put, check that it is online."
+              : "A replacement sensor can be rebuilt from the terminal: Info → Restore Sensor."}
+          </p>
+        </div>
+      )}
 
       {devices.length === 0 ? (
         <EmptyState

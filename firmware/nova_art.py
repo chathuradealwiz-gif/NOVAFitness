@@ -114,7 +114,8 @@ def finger_on_sensor(d, x, y, phase, bg=CARD, accent=RED):
     drop = (phase if phase < 4 else 3) * 3          # 0,3,6,9 then held at 9
     contact = phase >= 4
 
-    # Sensor pad: a rounded plate with a ring, like the R503's bezel.
+    # Sensor pad: a rounded plate with a ring. Drawn art, not a portrait of the
+    # module - it reads as "put your finger here" on any sensor.
     py = y + 34
     d.round_frame(x + 8, py, 46, 16, bg, accent if contact else BORDER_HI, r=6)
     d.fill_rect(x + 20, py + 6, 22, 3, accent if contact else MUTED)

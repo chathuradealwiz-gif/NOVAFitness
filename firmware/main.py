@@ -21,8 +21,9 @@ import config as cfg
 from nova_display import RED, GREEN, AMBER, MUTED, TEXT
 from nova_ui import UI, Button
 from xpt2046 import Touch
-from r503 import R503, FingerprintError, AURA_BREATHE, AURA_FLASH, AURA_OFF, BLUE, PURPLE
-from r503 import RED as AURA_RED
+from fingerprint import (Fingerprint, FingerprintError, AURA_BREATHE, AURA_FLASH,
+                         AURA_OFF, BLUE, PURPLE)
+from fingerprint import RED as AURA_RED
 from nova_net import WiFi, SupabaseDevice, NetworkError, iso_now
 from nova_store import Store
 
@@ -104,7 +105,7 @@ class Terminal:
         self.store = Store(cfg.DEVICE_CODE)
 
         self.ui.status_line("Fingerprint sensor")
-        self.fp = R503(cfg)
+        self.fp = Fingerprint(cfg)
         self.fp.aura(AURA_OFF, BLUE)
 
         self.wifi = WiFi(cfg, on_status=self.ui.status_line)
@@ -137,10 +138,14 @@ class Terminal:
         ]
 
     def _info_buttons(self):
+        """Four buttons between the staff card (ends at y=132) and the footer
+        (starts at y=296). 36 high with 4px gaps is what fits; anything taller
+        puts Back under the footer."""
         return [
-            Button("Add New User", 12, 148, 216, 44, primary=True, key="ENROLL"),
-            Button("Device Health", 12, 200, 216, 44, key="HEALTH"),
-            Button("Back", 12, 252, 216, 40, key="BACK"),
+            Button("Add New User", 12, 138, 216, 36, primary=True, key="ENROLL"),
+            Button("Device Health", 12, 178, 216, 36, key="HEALTH"),
+            Button("Restore Sensor", 12, 218, 216, 36, key="RESTORE"),
+            Button("Back", 12, 258, 216, 36, key="BACK"),
         ]
 
     # --- clock --------------------------------------------------------------
@@ -213,6 +218,7 @@ class Terminal:
         if data.get("server_time"):
             self.api.set_clock(data["server_time"])
         self.erase_slots(data.get("erase") or [])
+        self.retry_backups()
 
     def erase_slots(self, slots):
         """Delete the templates the dashboard asked us to erase.
@@ -401,7 +407,8 @@ class Terminal:
 
         # The slot only counts once Supabase has stored the mapping.
         try:
-            self.api.report_enrollment(request_id, True, fingerprint_id=slot)
+            assigned = self.api.report_enrollment(
+                request_id, True, fingerprint_id=slot)
         except NetworkError as e:
             # The template is on the sensor but the backend does not know about
             # it. Remove it rather than leave an orphan slot that would let an
@@ -416,6 +423,17 @@ class Terminal:
             self.show_home()
             return
 
+        # Back the template up off the device. The member is standing at the
+        # sensor, so this must never fail the enrollment they just completed:
+        # a failure is written to flash and retried by the next sync.
+        member_id = (assigned or {}).get("member_id")
+        if member_id:
+            self.store.mark_backup_pending(member_id, slot)
+            try:
+                self.upload_backup(member_id, slot)
+            except (FingerprintError, OSError, NetworkError):
+                pass
+
         self.buzzer.granted()
         self.ui.result(True, "Enrolled", member, "Slot %d saved" % slot,
                        "ID %s" % membership_id if membership_id else "")
@@ -425,6 +443,33 @@ class Terminal:
         except NetworkError:
             pass
         self.show_home()
+
+    def upload_backup(self, member_id, slot):
+        """Read a slot's template off the sensor and store it in Supabase.
+
+        Cleared from the pending list only once the server has it, so a reboot
+        between capturing and uploading costs a retry, not the template.
+        """
+        template = self.fp.backup(slot)
+        self.api.backup_template(member_id, slot, self.fp.model, template)
+        self.store.clear_backup(member_id)
+
+    def retry_backups(self, limit=3):
+        """Push any templates the enrollment could not upload at the time.
+
+        A few per sync rather than all of them: this runs on the same thread as
+        the door, and a member with a finger on the sensor should not wait
+        behind a backlog of uploads.
+        """
+        for member_id, slot in self.store.pending_backups()[:limit]:
+            try:
+                self.upload_backup(member_id, slot)
+            except NetworkError:
+                return                   # still offline; leave the rest queued
+            except (FingerprintError, OSError):
+                # The slot is gone or the sensor is busy. Dropping it would lose
+                # the backup silently, so leave it queued for the next pass.
+                continue
 
     def enroll_pressed(self):
         """The Enroll button. Enrollment is always started from the dashboard
@@ -499,6 +544,9 @@ class Terminal:
                 # Returns to the home screen itself, whatever the outcome.
                 self.enroll_pressed()
                 return
+            if hit.key == "RESTORE":
+                self.restore_sensor()
+                return
             if hit.key == "HEALTH":
                 self.health_screen()
                 if self.home_shown:
@@ -508,6 +556,72 @@ class Terminal:
                 self.ui.footer(self.footer_text())
                 self.home_shown = False
 
+    def restore_sensor(self):
+        """Write every backed-up template into the sensor.
+
+        The recovery path for a replaced module. It is the same DownChar+Store
+        per template that makes swapping templates in and out unusable during
+        normal operation - about a fifth of a second each - but here that is
+        ~90 seconds once, against days of marching 500 members past the desk.
+
+        Slots are restored to the page ids the members table already maps, so
+        nothing on the server has to be rewritten afterwards.
+        """
+        if not self.online:
+            self.ui.message("Offline", "Restoring needs a connection to NOVA.", AMBER)
+            self.hold(2500)
+            self.show_home()
+            return
+
+        self.ui.busy("Restore", "Fetching templates", accent=AMBER)
+        try:
+            templates, incompatible = self.api.fetch_templates(self.fp.model)
+        except NetworkError as e:
+            self.online = False
+            self.ui.message("No Connection", str(e), RED)
+            self.hold(3000)
+            self.show_home()
+            return
+
+        if not templates:
+            # An empty answer with rejected rows is the sensor-swap case, and it
+            # is worth saying plainly: the backups exist, they just belong to a
+            # different sensor family and cannot be loaded into this one.
+            detail = ("%d backups are from a different sensor model and cannot "
+                      "be restored." % incompatible) if incompatible else \
+                     "Nothing has been backed up for this device yet."
+            self.ui.message("Nothing to Restore", detail, AMBER)
+            self.hold(5000)
+            self.show_home()
+            return
+
+        total = len(templates)
+        done = 0
+        failed = 0
+
+        for slot, blob in templates:
+            self.ui.enroll_step(done, total,
+                                "Restoring %d of %d" % (done + 1, total))
+            try:
+                self.fp.restore(slot, blob)
+                done += 1
+            except (FingerprintError, OSError):
+                failed += 1
+
+        if failed:
+            self.buzzer.denied()
+        else:
+            self.buzzer.granted()
+
+        self.ui.result(
+            failed == 0,
+            "Restored" if failed == 0 else "Partly Restored",
+            "%d of %d" % (done, total),
+            "%d failed" % failed if failed else "Sensor rebuilt",
+            "%d incompatible" % incompatible if incompatible else "")
+        self.hold(6000)
+        self.show_home()
+
     def health_snapshot(self):
         """Live probe of every component, as plain data.
 
@@ -516,9 +630,15 @@ class Terminal:
         would let the screen and the web app disagree about the same second.
         """
         snap = {}
+        # Reported even when the sensor will not answer, so the dashboard can
+        # say which module is meant to be on the door while diagnosing why it
+        # is silent.
+        snap["sensor_model"] = self.fp.model
 
         # capacity() proves the sensor link end to end: a real command with a
-        # 16-byte reply, not just "the UART did not error".
+        # 16-byte reply, not just "the UART did not error". It is also the only
+        # place a mislabelled 200-slot module gives itself away, which is why
+        # the figure is shipped to the dashboard rather than assumed there.
         try:
             capacity = self.fp.capacity()
             enrolled = self.fp.template_count()
@@ -571,12 +691,17 @@ class Terminal:
 
         if snap.get("sensor") == "ok":
             free = snap["free_slots"]
-            rows.append(("Sensor", "OK", GREEN))
-            rows.append(("Capacity", "%d slots" % snap["capacity"], TEXT))
+            capacity = snap["capacity"]
+            rows.append(("Sensor", snap.get("sensor_model", "OK")[:13], GREEN))
+            rows.append(("Capacity", "%d slots" % capacity, TEXT))
             rows.append(("Enrolled", "%d prints" % snap["enrolled"], TEXT))
             # Amber before it bites: enrollment fails outright at zero free.
+            # The warning point scales with the library, because ten slots left
+            # is half a warning on a 200-slot sensor and no warning at all on
+            # the R307's 1000 - by then the gym has days, not months, of room.
+            low = max(10, capacity // 20)
             rows.append(("Free", "%d left" % free,
-                         RED if free <= 0 else AMBER if free < 10 else GREEN))
+                         RED if free <= 0 else AMBER if free < low else GREEN))
         else:
             fail("Sensor", snap.get("sensor_error", "No reply")[:13])
 

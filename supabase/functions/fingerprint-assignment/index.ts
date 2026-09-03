@@ -2,7 +2,7 @@
 //
 // The device half of fingerprint enrollment. Actions:
 //   poll     -> is there an enrollment request waiting for this device?
-//   report   -> the R503Pro finished; here is the slot it allocated
+//   report   -> the sensor finished; here is the slot it allocated
 //   removed  -> the slot was deleted from the sensor
 //
 // The dashboard side (creating/cancelling requests) goes through RLS on
@@ -116,7 +116,11 @@ Deno.serve(async (req) => {
       .update({ status: "completed", fingerprint_id: body.fingerprint_id })
       .eq("id", request.id);
 
-    return json({ ok: true, assigned: true });
+    // member_id goes back so the device can upload the template it just
+    // captured to fingerprint-template. The device never learns a member id any
+    // other way — it works in sensor slots — and the backup has to be keyed by
+    // member, because the slot is only a fact about the hardware that died.
+    return json({ ok: true, assigned: true, member_id: request.member_id });
   }
 
   // Live capture progress, so the member page can show how far along the

@@ -11,6 +11,12 @@ The door has to keep working when Wi-Fi does not. Two files:
                server. On flash, not in RAM, so a reboot between erasing a
                template and reporting it does not leave the server believing
                a deleted member's fingerprint is still on the device.
+  backups.json {member_id, fingerprint_id} pairs whose template is on the
+               sensor but not yet uploaded. The upload happens with the member
+               still standing at the door, so it must never be allowed to fail
+               the enrolment - it is retried from here on the next sync
+               instead. No template is kept in this file: it is re-read from
+               the sensor when the retry runs.
 """
 
 import json
@@ -19,6 +25,7 @@ import os
 QUEUE_PATH = "queue.jsonl"
 CACHE_PATH = "cache.json"
 ERASED_PATH = "erased.json"
+BACKUP_PATH = "backups.json"
 COUNTER_PATH = "counter.txt"
 MAX_QUEUE = 500
 
@@ -158,6 +165,34 @@ class Store:
                     json.dump(slots, f)
             elif _exists(ERASED_PATH):
                 os.remove(ERASED_PATH)
+        except OSError:
+            pass
+
+    # --- templates awaiting upload ------------------------------------------
+    def pending_backups(self):
+        """Slots enrolled but not yet backed up, as [(member_id, slot), ...]."""
+        try:
+            with open(BACKUP_PATH) as f:
+                return [(str(r[0]), int(r[1])) for r in json.load(f)]
+        except (OSError, ValueError, IndexError, TypeError):
+            return []
+
+    def mark_backup_pending(self, member_id, fingerprint_id):
+        rows = [r for r in self.pending_backups() if r[0] != str(member_id)]
+        rows.append((str(member_id), int(fingerprint_id)))
+        self._write_backups(rows)
+
+    def clear_backup(self, member_id):
+        self._write_backups(
+            [r for r in self.pending_backups() if r[0] != str(member_id)])
+
+    def _write_backups(self, rows):
+        try:
+            if rows:
+                with open(BACKUP_PATH, "w") as f:
+                    json.dump([list(r) for r in rows], f)
+            elif _exists(BACKUP_PATH):
+                os.remove(BACKUP_PATH)
         except OSError:
             pass
 

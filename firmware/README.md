@@ -1,6 +1,6 @@
 # NOVA FITNESS — ESP32-S3 door terminal (MicroPython)
 
-Firmware for the entrance terminal: R503 fingerprint sensor, 2.4" ILI9341
+Firmware for the entrance terminal: R307 fingerprint sensor, 2.4" ILI9341
 touchscreen, buzzer, and an HTTPS link to the Supabase Edge Functions that the
 Vercel dashboard shares.
 
@@ -17,7 +17,7 @@ Vercel dashboard shares.
                                           │
                                  ┌────────┴────────┐
                                  │   ESP32-S3      │
-                                 │  R503 · TFT ·   │
+                                 │  R307 · TFT ·   │
                                  │  touch · buzzer │
                                  └─────────────────┘
 ```
@@ -40,7 +40,7 @@ on Vercel, and nothing on the device to expose to the internet.
 | `nova_ui.py` | Screens and buttons in the web app's design language |
 | `nova_art.py` | Fingerprint mark and finger-on-sensor artwork |
 | `xpt2046.py` | Touch controller, on its own SPI bus |
-| `r503.py` | Fingerprint protocol: identify, enroll, slot allocation |
+| `fingerprint.py` | Sensor protocol: identify, enroll, slot allocation. One driver for the whole ZFM family (R307, R503) |
 | `nova_net.py` | Wi-Fi, hand-rolled HTTPS POST, the five API calls |
 | `nova_store.py` | Offline queue, authorisation cache and pending erasures on flash |
 | `calibrate.py` | Run once, prints the `TOUCH_CAL` numbers |
@@ -49,7 +49,35 @@ on Vercel, and nothing on the device to expose to the internet.
 
 ## Wiring — additions to the tested arrangement
 
-Everything in `ESP32_S3_R503_TFT_Pin_Arrangement.md` stays exactly as it is.
+Every GPIO in `ESP32_S3_R503_TFT_Pin_Arrangement.md` stays exactly as it is.
+
+### Fingerprint sensor (R307)
+
+The R307 replaced the R503 for capacity: 1000 templates against 200, which is
+what a 500-member gym needs. Same UART, same 57600 baud, same command set — the
+driver did not change. What changed is the supply:
+
+| R307 wire | Function | Connects to |
+|---|---|---|
+| Red | VCC | **5 V at the HW-688 terminal** — not 3.3 V, not the ESP32's 5V pin |
+| Black | GND | buck terminal, same star point |
+| Yellow | TXD | GPIO16 — 3.3 V logic, direct |
+| Green | RXD | GPIO17 — accepts 3.3 V |
+| Blue | WAKEUP | unconnected (the idle loop polls `get_image()`) |
+| White | VT (3.3 V touch supply) | unconnected |
+
+The R503 ran on 3.3 V; **the R307 will not start below 4.2 V.** Its data lines
+stay 3.3 V TTL, so no level shifter is needed. Wire colours vary between
+suppliers — measure before connecting: TXD idles high at ~3.3 V, RXD floats near
+zero. Add 100 µF + 100 nF at the connector, as with the modem.
+
+Moving the sensor to 5 V takes it off the ESP32's onboard 3.3 V regulator, which
+now has that headroom for the display.
+
+The R307 has no RGB ring, so `SENSOR_HAS_AURA = False` and `aura()` returns
+immediately instead of waiting out a timeout on every screen change. Nothing is
+lost: the TFT and buzzer already carried every cue the ring gave.
+
 Touch adds five wires:
 
 | TFT touch pin | ESP32-S3 | Note |
@@ -141,12 +169,18 @@ banner says `ALL CHECKS PASS` or `n FAULTS`, and any failing row is red with the
 reason on it — a sensor confirmation code, an unreachable server, the last
 unhandled error from the main loop.
 
-Sensor capacity comes from the chip's own `ReadSysPara`, not from the datasheet:
-the R503 family ships in 200- and 1000-template variants, and the firmware used
-to assume 200 everywhere. On a 1000-template unit that silently capped
-`search()` at slot 200 and read only half the index table, so members enrolled
-above it would never have matched. The health screen shows capacity, enrolled
-and free, and warns amber below ten slots left.
+Sensor capacity comes from the chip's own `ReadSysPara`, not from the datasheet
+and not from the seller. These modules ship in 200- and 1000-template variants
+that are labelled interchangeably, and the firmware used to assume 200
+everywhere. On a 1000-template unit that silently capped `search()` at slot 200
+and read only half the index table, so members enrolled above it would never
+have matched. The health screen shows the model, capacity, enrolled and free,
+and warns amber below 5% of the library (a floor of ten slots) — a fixed ten
+was most of a warning on a 200-slot sensor and no warning at all on 1000.
+
+**On a new sensor, run `selftest.py` and confirm the capacity before enrolling
+anyone.** A 200-slot module sold as a 1000 is common, and the alternative to
+one command now is discovering it at member 201.
 
 ## Offline behaviour
 

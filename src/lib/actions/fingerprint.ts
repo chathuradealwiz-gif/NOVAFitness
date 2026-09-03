@@ -8,7 +8,7 @@ import type { EnrollmentRequest } from "@/types/database";
 
 /**
  * Puts a device into enrollment mode for one member. The device polls
- * fingerprint-assignment, runs the R503Pro capture, and reports the slot back;
+ * fingerprint-assignment, runs the sensor capture, and reports the slot back;
  * only then is the mapping written (spec "Fingerprint Enrollment").
  */
 export async function requestEnrollment(
@@ -74,7 +74,7 @@ export async function cancelEnrollment(requestId: string, memberId: string): Pro
  * here rather than later: the slot number lives only in the columns this clears,
  * so once they are null nothing in the database knows which slot to erase — and
  * a re-enrollment does not reclaim it either, because the terminal allocates the
- * next FREE slot, leaving the old template in the R503's flash for good.
+ * next FREE slot, leaving the old template in the sensor's flash for good.
  *
  * The queue is drained by device-sync, which hands the slot to the terminal on
  * its next round trip.
