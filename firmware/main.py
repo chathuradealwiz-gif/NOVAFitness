@@ -261,10 +261,25 @@ class Terminal:
             self.store.mark_erased(done)
 
     def tick(self):
-        """Timed background work. Never raises into the main loop."""
+        """Timed background work. Never raises into the main loop.
+
+        Every interval here is measured from when the last call *finished*,
+        not when it started. Over 4G a round trip is seconds rather than
+        milliseconds, and stamping the timer first means a call that outlasts
+        its own interval is already overdue when it returns - so the loop goes
+        straight back into the network and never reaches the sensor again. The
+        door then ignores fingers entirely, which is exactly how this looked
+        on the bench: fine on Wi-Fi, dead on 4G.
+        """
+        # Only when WAKEUP is wired: without it finger_present() is always True
+        # and this would stop the heartbeat forever.
+        if self.fp_wake is not None and self.finger_present():
+            # Someone is at the sensor. Background work can wait a pass; they
+            # cannot.
+            return
+
         now = time.ticks_ms()
         if time.ticks_diff(now, self.last_heartbeat) > cfg.HEARTBEAT_SECONDS * 1000:
-            self.last_heartbeat = now
             try:
                 self.api.heartbeat(self.store.pending(), self.health_snapshot())
                 was_offline = not self.online
@@ -276,17 +291,21 @@ class Terminal:
                 if self.online:
                     self.online = False
                     self.ui.footer(self.footer_text())
+            self.last_heartbeat = time.ticks_ms()
 
         if time.ticks_diff(now, self.last_poll) > cfg.ENROLL_POLL_SECONDS * 1000:
-            self.last_poll = now
             if self.online:
                 try:
                     enrollment = self.api.poll_enrollment()
                 except NetworkError:
+                    self.last_poll = time.ticks_ms()
                     return
+                self.last_poll = time.ticks_ms()
                 if enrollment:
                     # Staff pressed "Enroll fingerprint" on the member's page.
                     self.run_enrollment(enrollment)
+            else:
+                self.last_poll = time.ticks_ms()
 
     # --- fingerprint sign-in ------------------------------------------------
     def sign_in(self, prompted=False):
