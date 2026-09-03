@@ -90,26 +90,42 @@ class WiFi:
     def ensure(self):
         return self.wlan.isconnected() or self.connect()
 
-
-class SupabaseDevice:
-    """One Edge Function call per method. Every method raises NetworkError on
-    transport trouble and returns the decoded JSON otherwise."""
-
-    def __init__(self, cfg, wifi):
-        self.base = cfg.SUPABASE_URL.rstrip("/") + "/functions/v1"
-        self.anon = cfg.SUPABASE_ANON_KEY
-        self.device_code = cfg.DEVICE_CODE
-        self.device_key = cfg.DEVICE_KEY
-        self.firmware = cfg.FIRMWARE_VERSION
-        self.timeout = cfg.HTTP_TIMEOUT
-        self.verify = getattr(cfg, "VERIFY_TLS", False)
-        self.wifi = wifi
-        self._ctx = None
-        # Offset between the ESP32's clock and the server's, learned from
-        # /device-heartbeat. There is no RTC battery in this design.
-        self.clock_synced = False
-
     # --- transport ----------------------------------------------------------
+    def fetch(self, host, head, body, timeout=None):
+        """Send one HTTP request over TLS and return the raw response bytes.
+
+        Modem.fetch has the same signature and returns the same thing, so
+        SupabaseDevice does not care which link it is holding.
+        """
+        if not self.ensure():
+            raise NetworkError("offline")
+
+        timeout = timeout or self.timeout
+        sock = None
+        try:
+            addr = socket.getaddrinfo(host, _TLS_PORT)[0][-1]
+            sock = socket.socket()
+            sock.settimeout(timeout)
+            sock.connect(addr)
+            sock = self._wrap_tls(sock, host)
+            sock.write(head.encode() if isinstance(head, str) else head)
+            sock.write(body)
+            chunks = []
+            while True:
+                part = sock.read(512)
+                if not part:
+                    break
+                chunks.append(part)
+            return b"".join(chunks)
+        except OSError as e:
+            raise NetworkError("%s: %s" % (host, e))
+        finally:
+            if sock is not None:
+                try:
+                    sock.close()
+                except Exception:
+                    pass
+
     def _wrap_tls(self, sock, host):
         # MicroPython 1.19.1 provides ssl.wrap_socket(), not SSLContext.
         # Try SNI first; fall back for builds that do not accept
@@ -119,8 +135,107 @@ class SupabaseDevice:
         except TypeError:
             return ssl.wrap_socket(sock)
 
+
+class Uplink:
+    """Wi-Fi, the modem, or Wi-Fi with the modem behind it.
+
+    Chosen by LINK in config.py. Presents the same three methods either link
+    presents, so nothing above this has to know which one is carrying traffic
+    - and "4g" makes a test conclusive, where under "auto" a working router
+    means you never learn whether the modem would have coped.
+    """
+
+    def __init__(self, cfg, on_status=None):
+        self.mode = getattr(cfg, "LINK", "auto")
+        self.on_status = on_status or (lambda msg: None)
+        self.timeout = getattr(cfg, "HTTP_TIMEOUT", 12)
+        self.wifi = None
+        self.modem = None
+        self.active = None
+
+        if self.mode in ("wifi", "auto"):
+            self.wifi = WiFi(cfg, on_status)
+        if self.mode in ("4g", "auto"):
+            if getattr(cfg, "PIN_MODEM_TX", None) is None:
+                if self.mode == "4g":
+                    raise NetworkError("LINK is 4g but PIN_MODEM_TX is None")
+            else:
+                # Imported here so a device with no modem fitted never pays
+                # for the module, and a broken driver cannot stop Wi-Fi
+                # booting.
+                from nova_modem import Modem
+                self.modem = Modem(cfg, on_status)
+
+    # The interface every caller uses -----------------------------------------
+    def connected(self):
+        return bool(self.active and self.active.connected())
+
+    def rssi(self):
+        return self.active.rssi() if self.active else None
+
+    def status_text(self):
+        if self.active:
+            return self.active.status_text()
+        return "WiFi offline" if self.mode == "wifi" else "offline"
+
+    def ensure(self):
+        if self.active and self.active.connected():
+            return True
+        # Wi-Fi first under "auto": it is cheaper, faster and already paid for.
+        for link in (self.wifi, self.modem):
+            if link is None:
+                continue
+            try:
+                if link.ensure():
+                    self.active = link
+                    return True
+            except Exception as e:
+                self.on_status(str(e))
+        self.active = None
+        return False
+
+    def connect(self):
+        """Alias for ensure(). main.py and selftest.py speak WiFi's vocabulary
+        and should not have to change because a second link exists."""
+        return self.ensure()
+
+    def fetch(self, host, head, body, timeout=None):
+        if not self.ensure():
+            raise NetworkError("offline")
+        try:
+            return self.active.fetch(host, head, body, timeout or self.timeout)
+        except Exception as e:
+            # A link that fails mid-request is not trusted for the next one:
+            # dropping it here means ensure() re-runs the whole ladder and can
+            # fall through to the other link.
+            self.active = None
+            raise NetworkError(str(e))
+
+
+class SupabaseDevice:
+    """One Edge Function call per method. Every method raises NetworkError on
+    transport trouble and returns the decoded JSON otherwise."""
+
+    def __init__(self, cfg, link):
+        self.base = cfg.SUPABASE_URL.rstrip("/") + "/functions/v1"
+        self.anon = cfg.SUPABASE_ANON_KEY
+        self.device_code = cfg.DEVICE_CODE
+        self.device_key = cfg.DEVICE_KEY
+        self.firmware = cfg.FIRMWARE_VERSION
+        self.timeout = cfg.HTTP_TIMEOUT
+        self.verify = getattr(cfg, "VERIFY_TLS", False)
+        self.link = link
+        # Kept as .wifi too: main.py and selftest.py reach for that name, and
+        # an Uplink answers connected()/rssi()/status_text() the same way.
+        self.wifi = link
+        self._ctx = None
+        # Offset between the ESP32's clock and the server's, learned from
+        # /device-heartbeat. There is no RTC battery in this design.
+        self.clock_synced = False
+
+    # --- transport ----------------------------------------------------------
     def _post(self, function, payload):
-        if not self.wifi.ensure():
+        if not self.link.ensure():
             raise NetworkError("offline")
 
         host, path = _parse_url("%s/%s" % (self.base, function))
@@ -136,35 +251,14 @@ class SupabaseDevice:
             "Connection: close\r\n\r\n"
         ) % (path, host, self.anon, self.anon, self.device_key, len(body))
 
-        sock = None
         try:
-            addr = socket.getaddrinfo(host, _TLS_PORT)[0][-1]
-            sock = socket.socket()
-            sock.settimeout(self.timeout)
-            sock.connect(addr)
-            sock = self._wrap_tls(sock, host)
-            sock.write(head.encode())
-            sock.write(body)
-            raw = self._read_all(sock)
-        except OSError as e:
+            raw = self.link.fetch(host, head, body, self.timeout)
+        except NetworkError:
+            raise
+        except Exception as e:
             raise NetworkError("post %s: %s" % (function, e))
-        finally:
-            if sock is not None:
-                try:
-                    sock.close()
-                except Exception:
-                    pass
 
         return self._decode(function, raw)
-
-    def _read_all(self, sock):
-        chunks = []
-        while True:
-            part = sock.read(512)
-            if not part:
-                break
-            chunks.append(part)
-        return b"".join(chunks)
 
     def _decode(self, function, raw):
         split = raw.find(b"\r\n\r\n")

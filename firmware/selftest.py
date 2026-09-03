@@ -64,10 +64,11 @@ def run():
     except Exception as e:
         line("Buzzer", False, str(e))
 
-    # 5. Wi-Fi
-    from nova_net import WiFi, SupabaseDevice, NetworkError
-    wifi = WiFi(cfg, on_status=lambda m: print("   ...", m))
-    if not line("Wi-Fi", wifi.connect(), wifi.status_text()):
+    # 5. Uplink - Wi-Fi, 4G, or Wi-Fi with 4G behind it (LINK in config.py)
+    from nova_net import Uplink, SupabaseDevice, NetworkError
+    wifi = Uplink(cfg, on_status=lambda m: print("   ...", m))
+    if not line("Uplink (%s)" % getattr(cfg, "LINK", "auto"),
+                wifi.connect(), wifi.status_text()):
         return
 
     # 6. Supabase Edge Functions, one at a time

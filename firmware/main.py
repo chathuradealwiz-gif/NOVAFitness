@@ -24,9 +24,14 @@ from xpt2046 import Touch
 from fingerprint import (Fingerprint, FingerprintError, AURA_BREATHE, AURA_FLASH,
                          AURA_OFF, BLUE, PURPLE)
 from fingerprint import RED as AURA_RED
-from nova_net import WiFi, SupabaseDevice, NetworkError, iso_now
+from nova_net import Uplink, SupabaseDevice, NetworkError, iso_now
 from nova_store import Store
 
+
+# How often the sensor is imaged even though WAKEUP says no finger, so a dead
+# wake wire degrades to slower polling rather than to a door that ignores
+# everyone. See Terminal.finger_present().
+WAKE_SWEEP_MS = 1500
 
 DAYS = ("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")
 MONTHS = ("Jan", "Feb", "Mar", "Apr", "May", "Jun",
@@ -108,13 +113,23 @@ class Terminal:
         self.fp = Fingerprint(cfg)
         self.fp.aura(AURA_OFF, BLUE)
 
-        self.wifi = WiFi(cfg, on_status=self.ui.status_line)
+        # R307 WAKEUP, when it is wired. Pulled to the inactive level so an
+        # unpowered VT reads "no finger" rather than floating into a loop that
+        # images continuously.
+        wake_pin = getattr(cfg, "PIN_FP_WAKEUP", None)
+        self.fp_wake = (
+            Pin(wake_pin, Pin.IN,
+                Pin.PULL_DOWN if cfg.FP_WAKEUP_ACTIVE_HIGH else Pin.PULL_UP)
+            if wake_pin is not None else None)
+
+        self.wifi = Uplink(cfg, on_status=self.ui.status_line)
         self.api = SupabaseDevice(cfg, self.wifi)
 
         self.online = False
         self.last_heartbeat = 0
         self.last_poll = 0
         self._since_gc = 0
+        self._last_sweep = 0
         # Set whenever show_home() runs, so a nested screen can tell that
         # something underneath it (an enrollment started from the dashboard)
         # has already returned the terminal to the home screen.
@@ -723,7 +738,7 @@ class Terminal:
         rows.append(("Touch", "OK", GREEN))
 
         if snap.get("wifi"):
-            rows.append(("Wi-Fi", self.wifi.status_text().replace("WiFi ", ""), GREEN))
+            rows.append(("Uplink", self.wifi.status_text().replace("WiFi ", ""), GREEN))
         else:
             fail("Wi-Fi", "Offline")
 
@@ -849,6 +864,35 @@ class Terminal:
         self.show_home()
 
     # --- helpers ------------------------------------------------------------
+    def finger_present(self):
+        """Is a finger on the sensor? True when there is no way to tell.
+
+        With the R307's WAKEUP wired, this reads a pin: the sensor images only
+        when someone is actually there, so the capture light stops strobing and
+        a finger arriving between polls is still seen.
+
+        Without it, returning True keeps the old behaviour - image on every
+        pass and let get_image() report an empty platen - which is the honest
+        answer, because an unwired board genuinely cannot know.
+
+        A stuck-low pin - VT losing power, the blue wire breaking - would
+        otherwise make the door ignore every finger with no error anywhere: it
+        would simply stop working, quietly. So the sensor is still swept every
+        WAKE_SWEEP_MS regardless of the pin. That costs one wasted image every
+        second and a half, and it means a failed wire degrades to the old
+        polling behaviour instead of to a dead door.
+        """
+        if self.fp_wake is None:
+            return True
+        if bool(self.fp_wake.value()) == cfg.FP_WAKEUP_ACTIVE_HIGH:
+            return True
+
+        now = time.ticks_ms()
+        if time.ticks_diff(now, self._last_sweep) > WAKE_SWEEP_MS:
+            self._last_sweep = now
+            return True
+        return False
+
     def hold(self, ms):
         """Show a screen for a while, but let a tap cut it short."""
         deadline = time.ticks_add(time.ticks_ms(), ms)
@@ -883,7 +927,7 @@ class Terminal:
 
                 # Idle: a finger on the sensor signs in without touching anything.
                 try:
-                    if self.fp.get_image() == 0:
+                    if self.finger_present() and self.fp.get_image() == 0:
                         # Convert first, draw second. img2tz() is the step the
                         # finger has to stay still for, so anything drawn before
                         # it is added to how long the member must hold.
