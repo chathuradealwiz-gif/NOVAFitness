@@ -99,8 +99,10 @@ The touch chip is on SPI bus 2 rather than sharing the panel's bus. The ILI9341
 runs at 40 MHz and the XPT2046 tops out near 2 MHz; sharing would mean
 re-clocking the bus on every touch poll, which shows as visible tearing.
 
-Optional door hardware (relay on GPIO5, reed switch on GPIO6) is off by default
-— set `PIN_DOOR_RELAY` / `PIN_REED` in `config.py` to enable it.
+The relay that drives the solenoid lock is on GPIO5 (`PIN_DOOR_RELAY`). A granted
+fingerprint pulses it for `DOOR_UNLOCK_MS` (1 s) and re-locks; no reed switch is
+fitted, so nothing waits on a door contact. Set `PIN_DOOR_RELAY` to `None` to
+run display-only on the bench.
 
 ## Setup
 
