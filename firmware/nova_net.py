@@ -18,6 +18,7 @@ import ssl
 import json
 import time
 import machine
+import ubinascii
 
 _TLS_PORT = 443
 
@@ -302,6 +303,44 @@ class SupabaseDevice:
             "action": "removed",
             "fingerprint_id": fingerprint_id,
         })
+
+    def backup_template(self, member_id, fingerprint_id, sensor_model, template):
+        """Upload one captured template for safe keeping.
+
+        The sensor's flash is otherwise the only copy of a member's fingerprint,
+        and nothing in the database can regenerate one - losing the module means
+        every member enrolling again.
+        """
+        return self._post("fingerprint-template", {
+            "device_id": self.device_code,
+            "action": "store",
+            "member_id": member_id,
+            "fingerprint_id": fingerprint_id,
+            "sensor_model": sensor_model,
+            "template": ubinascii.b2a_base64(template).decode().strip(),
+        })
+
+    def fetch_templates(self, sensor_model):
+        """Every template held for this device, for rebuilding a new sensor.
+
+        The model is sent so the server can refuse templates from a different
+        sensor family: they would restore without error and then match nobody.
+        """
+        data = self._post("fingerprint-template", {
+            "device_id": self.device_code,
+            "action": "fetch",
+            "sensor_model": sensor_model,
+        })
+        out = []
+        for row in data.get("templates") or []:
+            try:
+                out.append((
+                    int(row["fingerprint_id"]),
+                    ubinascii.a2b_base64(row["template"]),
+                ))
+            except (KeyError, ValueError):
+                continue
+        return out, data.get("incompatible", 0)
 
     def lookup(self, fingerprint_id=None, membership_id=None):
         payload = {"device_id": self.device_code}

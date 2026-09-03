@@ -158,7 +158,7 @@ The device half of enrollment. The dashboard creates the request; the device pol
 
 `{"enrollment": null}` means nothing is waiting. Poll every few seconds while idle.
 
-**Report** — after the R503Pro finishes capturing:
+**Report** — after the sensor finishes capturing:
 
 ```json
 {
@@ -174,10 +174,70 @@ The device chooses the free sensor slot itself and reports which one it used. If
 that slot was previously assigned to another member, the old mapping is cleared
 first. On failure send `"success": false` with an `"error"` string.
 
+The reply carries `member_id`, which the device needs for `/fingerprint-template`
+— it otherwise only ever knows members by their sensor slot.
+
+```json
+{ "ok": true, "assigned": true, "member_id": "3a7e…" }
+```
+
 **Removed** — `{ "device_id": "GYM-001", "action": "removed", "fingerprint_id": 37 }`
 clears the mapping after the template is deleted from the sensor.
 
 Requests expire after 10 minutes so an abandoned enrollment does not lock the sensor.
+
+---
+
+## POST /fingerprint-template
+
+Off-device backup of the biometric templates. The sensor's flash is otherwise
+the only copy of a member's fingerprint, and no other data in the system can
+regenerate one — losing the module means every member enrolling again.
+
+The blob is opaque: it is the sensor vendor's own feature encoding, not
+ISO 19794-2. Nothing server-side interprets or matches it. It is stored as bytes
+and handed back only to a sensor of the same family, which is why `sensor_model`
+travels with it.
+
+**Store** — immediately after a successful enrollment report:
+
+```json
+{
+  "device_id": "GYM-001",
+  "action": "store",
+  "member_id": "3a7e…",
+  "fingerprint_id": 37,
+  "sensor_model": "R307",
+  "template": "<base64>"
+}
+```
+
+Rejected with `409 slot_not_assigned` unless that member really is mapped to
+that slot on that device — a device key alone must not be enough to write a
+template against an arbitrary member.
+
+**Fetch** — rebuilding a replacement sensor:
+
+```json
+{ "device_id": "GYM-001", "action": "fetch", "sensor_model": "R307" }
+```
+
+```json
+{
+  "templates": [
+    { "member_id": "3a7e…", "fingerprint_id": 37, "byte_len": 512, "template": "<base64>" }
+  ],
+  "incompatible": 0
+}
+```
+
+Only templates captured on the same `sensor_model` are returned; the rest are
+counted in `incompatible`. An R307 is optical and an R503 capacitive, so a
+template moved between them would restore without error and then match nobody —
+better to refuse it than to hand back a recovery that silently did not work.
+
+Restoring is `DownChar` + `Store` per template, about 0.2 s each — roughly 90
+seconds for 500 members, against days of re-enrolling them at the desk.
 
 ---
 

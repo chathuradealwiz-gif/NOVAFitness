@@ -189,7 +189,17 @@ function HealthBody({ health }: { health: Health }) {
   const enrolled = health.enrolled ?? 0;
   const free = health.free_slots ?? Math.max(0, capacity - enrolled);
 
-  const slotLevel: Level = !sensorOk ? "idle" : free <= 0 ? "bad" : free < 10 ? "warn" : "good";
+  // The warning point scales with the library rather than sitting at a fixed
+  // ten: ten free is a fifth of a warning on a 200-slot R503 and a rounding
+  // error on the R307's 1000, where a busy month can eat fifty slots.
+  const lowWater = Math.max(10, Math.floor(capacity / 20));
+  const slotLevel: Level = !sensorOk
+    ? "idle"
+    : free <= 0
+      ? "bad"
+      : free < lowWater
+        ? "warn"
+        : "good";
   const ramLevel: Level =
     health.free_ram === undefined
       ? "idle"
@@ -233,7 +243,10 @@ function HealthBody({ health }: { health: Health }) {
         <div className="mt-4">
           <div className="flex items-baseline justify-between">
             <span className="nova-label">Fingerprint Slots</span>
-            <span className="text-xs text-nova-muted">{capacity} total</span>
+            <span className="text-xs text-nova-muted">
+              {health.sensor_model ? `${health.sensor_model} · ` : ""}
+              {capacity} total
+            </span>
           </div>
           <p className={`mt-1 text-2xl font-semibold ${LEVEL[slotLevel].text}`}>
             {free} <span className="text-sm font-normal text-nova-muted">free</span>
@@ -246,9 +259,16 @@ function HealthBody({ health }: { health: Health }) {
       )}
 
       <div className="mt-4 divide-y divide-nova-border border-t border-nova-border">
+        {/* Named rather than a bare "OK": the two modules that fit this door
+            differ in capacity and supply voltage, so which one is on it is the
+            first thing worth knowing when the slot count looks wrong. */}
         <StatusRow
           label="Fingerprint sensor"
-          value={sensorOk ? "OK" : (health.sensor_error ?? "No reply")}
+          value={
+            sensorOk
+              ? (health.sensor_model ?? "OK")
+              : (health.sensor_error ?? "No reply")
+          }
           level={sensorOk ? "good" : "bad"}
         />
         <StatusRow

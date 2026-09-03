@@ -1,4 +1,7 @@
-"""R503 / R503Pro fingerprint sensor over UART.
+"""ZFM-family fingerprint sensor over UART (R307, R503, R503Pro, DY50/FPM10A).
+
+Every module in this family speaks the same command set, so one driver covers
+all of them. NOVA FITNESS ships the R307: 1000 templates, optical, 5 V supply.
 
 Packet format (all big-endian):
     EF 01 | addr(4) | PID(1) | length(2) | payload(n) | checksum(2)
@@ -8,6 +11,15 @@ is the sum of PID, both length bytes and the payload, truncated to 16 bits.
 Slot numbering: the sensor's page id is what the backend calls fingerprint_id,
 and it is only unique per device - which is exactly how the `members` table
 scopes it (fingerprint_device_id + fingerprint_id).
+
+Two sensor differences this driver absorbs, so the same firmware runs on either
+module and a swap needs no code change:
+
+  * Library size. The R307 holds 1000 templates and the base R503 only 200.
+    Nothing here hardcodes a limit: capacity() asks the chip (ReadSysPara).
+  * The RGB aura ring (0x35) is an R503 feature; the R307 has no ring. aura()
+    is a no-op unless cfg.SENSOR_HAS_AURA is set. Nothing is lost by that -
+    every cue the ring gave is also on the TFT and the buzzer.
 """
 
 from machine import UART, Pin
@@ -17,13 +29,22 @@ _START = b"\xEF\x01"
 _ADDR = b"\xFF\xFF\xFF\xFF"
 _PID_CMD = 0x01
 _PID_ACK = 0x07
+# Template transfer streams the character file in its own packets, separate
+# from the command acknowledgement: DATA for every packet but the last, END for
+# the last one. A transfer is "ACK, then packets until END".
+_PID_DATA = 0x02
+_PID_END = 0x08
 
 # Commands
 _GET_IMAGE = 0x01
 _IMG2TZ = 0x02
+_MATCH = 0x03
 _SEARCH = 0x04
 _REG_MODEL = 0x05
 _STORE = 0x06
+_LOAD_CHAR = 0x07
+_UP_CHAR = 0x08
+_DOWN_CHAR = 0x09
 _DELETE = 0x0C
 _EMPTY = 0x0D
 _TEMPLATE_NUM = 0x1D
@@ -50,19 +71,20 @@ RED = 0x01
 BLUE = 0x02
 PURPLE = 0x03
 
-# Fallback only. The real figure comes from the sensor's own system parameters
-# (ReadSysPara): the R503 family ships in 200- and 1000-template variants, and
-# the datasheet figure for one is wrong for the other. capacity() asks the chip.
-MAX_SLOTS = 200
+# Fallback only, and deliberately not taken from a datasheet. This family ships
+# in 200- and 1000-template variants that sellers label interchangeably, so the
+# chip is the only honest source: capacity() asks it via ReadSysPara and only
+# falls back to cfg.SENSOR_CAPACITY (then this) when the sensor will not answer.
+MAX_SLOTS = 1000
 
 
 class FingerprintError(Exception):
     def __init__(self, code, where=""):
-        super().__init__("R503 %s failed: 0x%02X" % (where, code))
+        super().__init__("Sensor %s failed: 0x%02X" % (where, code))
         self.code = code
 
 
-class R503:
+class Fingerprint:
     def __init__(self, cfg):
         self.uart = UART(
             2,
@@ -74,8 +96,19 @@ class R503:
             rx=cfg.PIN_FP_RX,
             timeout=1000
         )
+        # Bytes read from the UART but not yet consumed as a whole packet.
+        # Persists across reads because a template arrives as a run of packets.
+        self._buf = bytearray()
         # Filled on first use from ReadSysPara.
         self._capacity = None
+        self._packet = None
+        # The R503 has an RGB ring; the R307 does not, and answering 0x35 on a
+        # module without one just burns 800 ms of the member's time per call.
+        self.has_aura = bool(getattr(cfg, "SENSOR_HAS_AURA", False))
+        # What the sensor is believed to be, for the health screen and the
+        # dashboard. Never used to decide capacity - the chip settles that.
+        self.model = getattr(cfg, "SENSOR_MODEL", "R307")
+        self._declared_capacity = getattr(cfg, "SENSOR_CAPACITY", MAX_SLOTS)
 
     # --- transport ----------------------------------------------------------
 
@@ -93,6 +126,10 @@ class R503:
         while self.uart.any():
             self.uart.read()
 
+        # Anything still buffered belongs to the command that just finished, so
+        # it must not be parsed as a reply to this one.
+        self._buf = bytearray()
+
         self.uart.write(
             _START +
             _ADDR +
@@ -103,11 +140,70 @@ class R503:
             ])
         )
 
-    def _recv(self, timeout_ms=2000):
-        deadline = time.ticks_add(time.ticks_ms(), timeout_ms)
-        buf = bytearray()
+    def _send_data(self, payload, last=False):
+        """One packet of an outgoing template stream (DownChar).
 
-        while time.ticks_diff(deadline, time.ticks_ms()) > 0:
+        Unlike _send() this must not flush the receive buffer: the sensor stays
+        silent until the whole stream has landed, and clearing mid-transfer
+        would throw away its final acknowledgement.
+        """
+        length = len(payload) + 2
+
+        body = bytes([
+            _PID_END if last else _PID_DATA,
+            length >> 8,
+            length & 0xFF
+        ]) + payload
+
+        checksum = sum(body) & 0xFFFF
+
+        self.uart.write(
+            _START +
+            _ADDR +
+            body +
+            bytes([
+                checksum >> 8,
+                checksum & 0xFF
+            ])
+        )
+
+    def _recv_packet(self, timeout_ms=2000):
+        """The next whole packet, as (pid, payload).
+
+        Leftovers stay in self._buf between calls. A template arrives as a run
+        of packets and the UART hands them over in arbitrary chunks, so the tail
+        of one read is regularly the head of the next packet.
+        """
+        deadline = time.ticks_add(time.ticks_ms(), timeout_ms)
+        buf = self._buf
+
+        while True:
+            # Resynchronise on the EF 01 packet header.
+            #
+            # MicroPython on this ESP32-S3 build does not provide
+            # bytearray.find(), so search for EF 01 manually.
+            idx = -1
+
+            for i in range(len(buf) - 1):
+                if buf[i] == 0xEF and buf[i + 1] == 0x01:
+                    idx = i
+                    break
+
+            if idx > 0:
+                del buf[:idx]
+
+            if len(buf) >= 9:
+                length = (buf[7] << 8) | buf[8]
+                total = 9 + length
+
+                if len(buf) >= total:
+                    pkt = bytes(buf[:total])
+                    del buf[:total]
+                    return pkt[6], pkt[9:total - 2]
+
+            if time.ticks_diff(deadline, time.ticks_ms()) <= 0:
+                raise OSError("Sensor timeout")
+
             # Only ever read what is already buffered. A bare uart.read() blocks
             # for the full UART timeout (1 s) whenever the sensor has not replied
             # yet, which used to add ~1-2 s to every single command.
@@ -116,37 +212,16 @@ class R503:
 
             if chunk:
                 buf.extend(chunk)
-
-                # Resynchronise on the EF 01 packet header.
-                #
-                # MicroPython on this ESP32-S3 build does not provide
-                # bytearray.find(), so search for EF 01 manually.
-                idx = -1
-
-                for i in range(len(buf) - 1):
-                    if buf[i] == 0xEF and buf[i + 1] == 0x01:
-                        idx = i
-                        break
-
-                if idx > 0:
-                    del buf[:idx]
-
-                if len(buf) >= 9:
-                    length = (buf[7] << 8) | buf[8]
-                    total = 9 + length
-
-                    if len(buf) >= total:
-                        pkt = bytes(buf[:total])
-
-                        if pkt[6] != _PID_ACK:
-                            raise FingerprintError(0xFF, "ack")
-
-                        return pkt[9:total - 2]
-
             else:
                 time.sleep_ms(2)
 
-        raise OSError("R503 timeout")
+    def _recv(self, timeout_ms=2000):
+        pid, payload = self._recv_packet(timeout_ms)
+
+        if pid != _PID_ACK:
+            raise FingerprintError(0xFF, "ack")
+
+        return payload
 
     def _cmd(self, payload, where="", timeout_ms=2000):
         self._send(payload)
@@ -154,7 +229,7 @@ class R503:
         data = self._recv(timeout_ms)
 
         if not data:
-            raise OSError("R503 empty response")
+            raise OSError("Sensor empty response")
 
         return data[0], data[1:]
 
@@ -169,7 +244,15 @@ class R503:
     # --- operations ---------------------------------------------------------
 
     def aura(self, control, color, speed=80, times=0):
-        """Ring LED. times=0 means run until changed."""
+        """Ring LED. times=0 means run until changed.
+
+        A no-op on a sensor without a ring. The R307 answers 0x35 with an error
+        after a full timeout, so calling it anyway would add most of a second to
+        every screen change - and the TFT and buzzer already carry every cue the
+        ring used to give.
+        """
+        if not self.has_aura:
+            return
         try:
             self._cmd(
                 bytes([
@@ -253,15 +336,15 @@ class R503:
     def search(self, buffer_id=1, start=0, count=None):
         """Returns (page_id, score) or None when no match.
 
-        The range searched is the sensor's real library size, not the assumed
-        200: on a 1000-template variant a hardcoded 200 would silently refuse
-        every member enrolled into a slot above it.
+        The range searched is the sensor's real library size, never a constant:
+        on the R307 a hardcoded 200 would silently refuse every member enrolled
+        into a slot above it - the 300th member would simply stop being let in.
         """
         if count is None:
             try:
                 count = self.capacity()
             except (FingerprintError, OSError):
-                count = MAX_SLOTS
+                count = self._declared_capacity
 
         payload = bytes([
             _SEARCH,
@@ -320,6 +403,123 @@ class R503:
             3000
         )
 
+    # --- template transfer --------------------------------------------------
+    #
+    # The sensor's flash is the only copy of a member's fingerprint, and a
+    # member cannot be re-derived from anything else: if the module dies, all
+    # 500 of them come back to the desk and enrol again. These three commands
+    # are what make that a swap instead of a re-enrolment.
+    #
+    # A template is opaque - the vendor's own feature encoding, not ISO 19794-2 -
+    # so it can only ever be handed back to a sensor of the same family. It is
+    # stored, never interpreted, and never matched anywhere but on the chip.
+
+    def load_char(self, page_id, buffer_id=1):
+        """Flash page -> char buffer."""
+        self._expect(
+            bytes([
+                _LOAD_CHAR,
+                buffer_id,
+                page_id >> 8,
+                page_id & 0xFF
+            ]),
+            "load_char",
+            3000
+        )
+
+    def up_char(self, buffer_id=1, timeout_ms=6000):
+        """Char buffer -> host. Returns the raw template bytes.
+
+        The reply is an acknowledgement followed by a run of data packets, the
+        last of them flagged END. Length is not announced anywhere, so the end
+        marker is the only thing that says the template is complete - which is
+        why a truncated read has to raise rather than return a short template
+        that would be stored as a valid backup.
+        """
+        self._send(bytes([_UP_CHAR, buffer_id]))
+
+        ack = self._recv(timeout_ms)
+        if not ack:
+            raise OSError("Sensor empty response")
+
+        code = ack[0]
+        if code != OK:
+            raise FingerprintError(code, "up_char")
+
+        out = bytearray()
+
+        while True:
+            pid, payload = self._recv_packet(timeout_ms)
+
+            if pid == _PID_DATA:
+                out.extend(payload)
+            elif pid == _PID_END:
+                out.extend(payload)
+                return bytes(out)
+            else:
+                raise FingerprintError(0xFF, "up_char")
+
+    def down_char(self, data, buffer_id=1, timeout_ms=6000):
+        """Host -> char buffer. Pair with store() to put it back in the library."""
+        if not data:
+            raise ValueError("empty template")
+
+        self._send(bytes([_DOWN_CHAR, buffer_id]))
+
+        ack = self._recv(timeout_ms)
+        if not ack:
+            raise OSError("Sensor empty response")
+
+        code = ack[0]
+        if code != OK:
+            raise FingerprintError(code, "down_char")
+
+        size = self.packet_size()
+
+        for i in range(0, len(data), size):
+            chunk = data[i:i + size]
+            self._send_data(chunk, last=(i + size >= len(data)))
+            # The sensor acknowledges nothing until the stream ends, but it does
+            # have to write each packet away. Without a breath between them a
+            # 512-byte template arrives faster than it is consumed and the tail
+            # is dropped.
+            time.sleep_ms(4)
+
+    def match(self, timeout_ms=3000):
+        """1:1 compare of the two char buffers. Returns the score, or None."""
+        code, rest = self._cmd(bytes([_MATCH]), "match", timeout_ms)
+
+        if code == NO_MATCH:
+            return None
+        if code != OK:
+            raise FingerprintError(code, "match")
+
+        return (rest[0] << 8) | rest[1]
+
+    def packet_size(self):
+        """Bytes per data packet. Cached; asked once."""
+        if self._packet is None:
+            try:
+                self._packet = self.sys_params()["packet"]
+            except (FingerprintError, OSError):
+                self._packet = 128
+        return self._packet
+
+    def backup(self, page_id):
+        """The stored template for a slot, read back out of the library.
+
+        Read from flash rather than from whatever is still in the buffer after
+        an enrolment: the backup must be byte-for-byte what the sensor will
+        actually match against, not what was on its way there.
+        """
+        self.load_char(page_id, 1)
+        return self.up_char(1)
+
+    def restore(self, page_id, data):
+        """Write a backed-up template into a slot."""
+        self.down_char(data, 1)
+        self.store(page_id, 1)
+
     def sys_params(self):
         """ReadSysPara: the sensor's own account of itself.
 
@@ -330,7 +530,7 @@ class R503:
         """
         rest = self._expect(bytes([_READ_SYS_PARA]), "sys_para")
         if len(rest) < 16:
-            raise OSError("R503 short sys_para")
+            raise OSError("Sensor short sys_para")
         return {
             "status": (rest[0] << 8) | rest[1],
             "capacity": (rest[4] << 8) | rest[5],
@@ -341,9 +541,13 @@ class R503:
         }
 
     def capacity(self):
-        """Template slots this sensor actually has. Cached; asked once."""
+        """Template slots this sensor actually has. Cached; asked once.
+
+        Asked, never assumed: a 200-slot module sold as a 1000 would otherwise
+        only reveal itself when member 201 failed to enrol.
+        """
         if self._capacity is None:
-            self._capacity = self.sys_params()["capacity"] or MAX_SLOTS
+            self._capacity = self.sys_params()["capacity"] or self._declared_capacity
         return self._capacity
 
     def template_count(self):
@@ -359,13 +563,12 @@ class R503:
 
         used = []
 
-        # One index page covers 256 slots. Two was right for a 200-template
-        # sensor and half the story on a 1000-template one, so ask how many the
-        # library actually needs.
+        # One index page covers 256 slots. Two covered a 200-template sensor and
+        # only half of what the R307 needs, so ask how many the library uses.
         try:
             pages = min(4, (self.capacity() + 255) // 256)
         except (FingerprintError, OSError):
-            pages = 2
+            pages = min(4, (self._declared_capacity + 255) // 256)
 
         for page in range(pages):
             try:
@@ -398,7 +601,7 @@ class R503:
         try:
             limit = self.capacity()
         except (FingerprintError, OSError):
-            limit = MAX_SLOTS
+            limit = self._declared_capacity
 
         for i in range(1, limit):
             if i not in used:

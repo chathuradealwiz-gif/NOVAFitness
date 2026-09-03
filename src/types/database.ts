@@ -114,6 +114,11 @@ export type Device = {
 export type DeviceHealth = {
   sensor?: "ok" | "error";
   sensor_error?: string;
+  /** Which module the device believes is fitted, e.g. "R307". Sent even when
+   *  the sensor is not answering, so a fault can be read against a named part. */
+  sensor_model?: string;
+  /** Read from the sensor itself (ReadSysPara), never assumed here: the R307
+   *  holds 1000 templates and the older R503 only 200. */
   capacity?: number;
   enrolled?: number;
   free_slots?: number;
@@ -268,6 +273,21 @@ type Row<T> = {
 
 type Fn<A, R> = { Args: A; Returns: R };
 
+/**
+ * One row per member with a fingerprint enrolled, saying whether that print
+ * also exists off the sensor. `backed_up: false` means losing the module costs
+ * that member a fresh enrolment — the template cannot be regenerated.
+ */
+export type FingerprintBackupStatus = {
+  member_id: string;
+  membership_id: string;
+  full_name: string;
+  fingerprint_id: number;
+  backed_up: boolean;
+  sensor_model: string | null;
+  backed_up_at: string | null;
+};
+
 export interface Database {
   public: {
     Tables: {
@@ -288,7 +308,12 @@ export interface Database {
       memberships: Row<Membership>;
       workout_files: Row<WorkoutFile>;
     };
-    Views: Record<string, never>;
+    Views: {
+      // Whether each enrolled member's template is backed up off the sensor.
+      // Deliberately carries no template bytes: staff need the count, and the
+      // biometric data itself is readable only by the Edge Functions.
+      fingerprint_backup_status: Row<FingerprintBackupStatus>;
+    };
     Functions: {
       dashboard_stats: Fn<Record<string, never>, DashboardStats>;
       attendance_trend: Fn<{ p_days?: number }, { day: string; entries: number; exits: number }[]>;

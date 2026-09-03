@@ -26,10 +26,28 @@ FIRMWARE_VERSION = "1.0.0"
 TZ_OFFSET_MINUTES = 330
 
 # --- Hardware ---------------------------------------------------------------
-# Kept exactly as the tested arrangement in ESP32_S3_R503_TFT_Pin_Arrangement.md.
-PIN_FP_TX = 17          # ESP32 TX -> R503 RX
-PIN_FP_RX = 16          # ESP32 RX <- R503 TX
+# GPIO assignments are unchanged from the tested R503 arrangement; the R307 swap
+# is a power change, not a pin change.
+PIN_FP_TX = 17          # ESP32 TX -> sensor RX (green)
+PIN_FP_RX = 16          # ESP32 RX <- sensor TX (yellow)
 PIN_BUZZER = 4
+
+# --- Fingerprint sensor -----------------------------------------------------
+# The R307 needs 4.2-6 V, so its VCC goes to the HW-688 buck's 5 V terminal -
+# NOT the 3.3 V rail the R503 used, and not the ESP32's 5V header pin (star
+# point at the buck, same rule the modem follows). Its data lines stay 3.3 V
+# TTL, so GPIO16/17 connect directly with no level shifter.
+SENSOR_MODEL = "R307"
+
+# Declared capacity, used only when the sensor will not answer ReadSysPara.
+# The driver always prefers the chip's own figure: sellers label 200-template
+# modules as 1000, and the difference must not be discovered at member 201.
+# Run selftest.py on a new sensor and confirm it prints 1000 before enrolling.
+SENSOR_CAPACITY = 1000
+
+# The RGB aura ring is an R503 part. The R307 has none, so leave this False and
+# the driver skips the 0x35 calls entirely rather than timing out on each one.
+SENSOR_HAS_AURA = False
 
 PIN_TFT_SCK = 12
 PIN_TFT_MOSI = 11

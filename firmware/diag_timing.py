@@ -7,7 +7,7 @@ Place your finger when asked. Prints milliseconds per stage.
 
 import time
 import config as cfg
-from r503 import R503
+from fingerprint import Fingerprint
 from nova_net import WiFi, SupabaseDevice, iso_now
 from nova_store import Store
 
@@ -16,7 +16,7 @@ def ms(t0):
     return time.ticks_diff(time.ticks_ms(), t0)
 
 
-fp = R503(cfg)
+fp = Fingerprint(cfg)
 wifi = WiFi(cfg)
 api = SupabaseDevice(cfg, wifi)
 store = Store(cfg.DEVICE_CODE)

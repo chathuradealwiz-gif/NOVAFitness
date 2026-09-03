@@ -27,7 +27,7 @@ The ESP32 never talks to PostgreSQL directly and never holds the service-role ke
 | 2 | Authentication and the three roles | ✅ |
 | 3 | Admin dashboard + mobile-first member app | ✅ |
 | 4 | Edge Functions (attendance, sync, heartbeat, enrollment, lookup) | ✅ |
-| 5–8 | ESP32 firmware: TFT, R503Pro, relay/door, A7670C | ⏳ not started |
+| 5–8 | ESP32 firmware: TFT, R307 sensor, relay/door, A7670C | ⏳ not started |
 | 9–10 | Device-side sync + offline queue (server contract is ready) | ⏳ not started |
 | 13 | Soldered electronics and enclosure | ⏳ not started |
 

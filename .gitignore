@@ -30,3 +30,5 @@ firmware/config.py
 firmware/queue.jsonl
 firmware/cache.json
 firmware/counter.txt
+firmware/erased.json
+firmware/backups.json
