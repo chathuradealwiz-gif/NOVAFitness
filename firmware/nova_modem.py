@@ -70,6 +70,19 @@ class Modem:
                 return l[len(prefix):].strip()
         return None
 
+    def _urc(self, lines, prefix, timeout_ms):
+        """The URC for a command that may answer before its own OK is read.
+
+        A fast TLS handshake puts +CCHOPEN in the same read as the OK, so it
+        is already in `lines` and waiting for it again burns the whole timeout
+        on something that has been and gone. A slow one arrives later. Both
+        happen, and which you get depends on the network that second.
+        """
+        for l in lines:
+            if l.startswith(prefix):
+                return l
+        return self._wait_urc(prefix, timeout_ms)
+
     def _wait_urc(self, prefix, timeout_ms):
         deadline = time.ticks_add(time.ticks_ms(), timeout_ms)
         buf = b""
@@ -203,8 +216,8 @@ class Modem:
         try:
             # client_type 2 is TLS. With 1 the socket opens unencrypted and
             # the server answers "plain HTTP request was sent to HTTPS port".
-            self._at('AT+CCHOPEN=0,"%s",443,2' % host, 5000)
-            opened = self._wait_urc("+CCHOPEN:", timeout * 1000 + 20000)
+            lines = self._at('AT+CCHOPEN=0,"%s",443,2' % host, 5000)
+            opened = self._urc(lines, "+CCHOPEN:", timeout * 1000 + 20000)
             if not opened or not opened.rstrip().endswith(",0"):
                 raise ModemError("connect %s: %s" % (host, opened or "no reply"))
 
@@ -248,5 +261,7 @@ class Modem:
             if s.startswith(b"+CCH"):
                 continue
             out.extend(ln + b"\r\n")
+        # bytes(), not bytearray: MicroPython's bytearray has no find().
+        out = bytes(out)
         start = out.find(b"HTTP/")
-        return bytes(out[start:]) if start > 0 else bytes(out)
+        return out[start:] if start >= 0 else out
