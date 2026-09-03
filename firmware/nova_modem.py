@@ -12,6 +12,10 @@ SSL settings that are not defaults and why each one is needed.
 import time
 from machine import UART, Pin
 
+# Bumped whenever this file changes, so "did that upload actually land?" is one
+# print rather than an evening of re-diagnosing a fixed bug.
+VERSION = 4
+
 _OK = "OK"
 _ERR = ("ERROR", "+CME ERROR", "+CMS ERROR")
 
@@ -30,7 +34,12 @@ class Modem:
             baudrate=getattr(cfg, "MODEM_BAUD", 115200),
             tx=cfg.PIN_MODEM_TX,
             rx=cfg.PIN_MODEM_RX,
-            timeout=1000,
+            # Short, because read() blocks for this long whenever the buffer is
+            # empty. At 1000 every command cost its whole timeout - eleven of
+            # them per request added up to 46 seconds of a loop that also has a
+            # door to answer. Reads are guarded by any() as well; this is just
+            # the backstop.
+            timeout=50,
             rxbuf=2048,
         )
         # Open-drain: PWK is an input to the modem's power circuit, not a line
@@ -40,22 +49,35 @@ class Modem:
             if getattr(cfg, "PIN_MODEM_PWRKEY", None) is not None else None)
         self._attached = False
         self._rssi = None
+        self.last_raw = b""
 
     # --- AT plumbing --------------------------------------------------------
+    def _read(self):
+        """Whatever is waiting, without blocking for more.
+
+        A bare read() sits until the UART's own timeout even when the modem
+        answered in a millisecond, which turned every timeout into a cost
+        rather than a limit.
+        """
+        n = self.uart.any()
+        return self.uart.read(n) if n else None
+
     def _at(self, cmd, timeout_ms=3000):
-        self.uart.read()
+        self._read()                        # drop anything stale
         self.uart.write(cmd + "\r\n")
         deadline = time.ticks_add(time.ticks_ms(), timeout_ms)
         buf = b""
         while time.ticks_diff(deadline, time.ticks_ms()) > 0:
-            chunk = self.uart.read()
+            chunk = self._read()
             if chunk:
                 buf += chunk
                 tail = buf.decode("utf-8", "ignore")
-                if _OK in tail or any(e in tail for e in _ERR):
+                # ">" is CCHSEND's prompt for payload; it never says OK, so
+                # without this the send alone costs a full timeout.
+                if _OK in tail or ">" in tail or any(e in tail for e in _ERR):
                     break
             else:
-                time.sleep_ms(20)
+                time.sleep_ms(5)
         return [l.strip() for l in buf.decode("utf-8", "ignore").splitlines()
                 if l.strip() and l.strip() != cmd]
 
@@ -87,14 +109,15 @@ class Modem:
         deadline = time.ticks_add(time.ticks_ms(), timeout_ms)
         buf = b""
         while time.ticks_diff(deadline, time.ticks_ms()) > 0:
-            chunk = self.uart.read()
+            chunk = self._read()
             if chunk:
                 buf += chunk
                 for l in buf.decode("utf-8", "ignore").splitlines():
                     l = l.strip()
                     if l.startswith(prefix):
                         return l
-            time.sleep_ms(50)
+            else:
+                time.sleep_ms(10)
         return None
 
     def power_toggle(self, ms=1500):
@@ -227,22 +250,78 @@ class Modem:
 
             raw = b""
             deadline = time.ticks_add(time.ticks_ms(), timeout * 1000 + 10000)
+            last = time.ticks_ms()
             while time.ticks_diff(deadline, time.ticks_ms()) > 0:
-                chunk = self.uart.read()
+                chunk = self._read()
                 if chunk:
                     raw += chunk
-                    # The peer closing is the only reliable end marker: the
-                    # body is chunked and its terminator arrives in its own
-                    # +CCHRECV.
-                    if b"+CCH_PEER_CLOSED" in raw:
+                    last = time.ticks_ms()
+                    # The peer closing is the tidy end marker, but only once a
+                    # response has actually started: a PEER_CLOSED left over
+                    # from the previous request would otherwise end this one
+                    # before its first byte, which reads upstream as a
+                    # truncated response rather than as the race it is.
+                    if b"+CCH_PEER_CLOSED" in raw and b"HTTP/" in raw:
                         break
-                time.sleep_ms(50)
+                    # Cloudflare does not always close promptly, and waiting
+                    # for it spent the whole timeout on every request - which
+                    # is what left the main loop with no time to read the
+                    # sensor. So stop as soon as the response is provably
+                    # whole, by its own framing.
+                    if self._complete(raw):
+                        break
+                elif raw and time.ticks_diff(time.ticks_ms(), last) > 1500:
+                    break
+                time.sleep_ms(20)
+            # Kept for diagnosis: when a reply comes back wrong, the bytes on
+            # the wire are the only thing that settles why.
+            self.last_raw = raw
             if not raw:
                 raise ModemError("no response from %s" % host)
-            return self._strip_urcs(raw)
+            data = self._strip_urcs(raw)
+            # Fail here rather than hand a fragment upstream: _decode would
+            # report "truncated response" with no clue whose fault it was, and
+            # a NetworkError makes Uplink drop the link and rebuild it.
+            if not data.startswith(b"HTTP/") or data.find(b"\r\n\r\n") < 0:
+                raise ModemError("incomplete reply from %s (%d bytes)"
+                                 % (host, len(data)))
+            return data
         finally:
             self._at("AT+CCHCLOSE=0", 5000)
             self._at("AT+CCHSTOP", 5000)
+
+    @classmethod
+    def _complete(cls, raw):
+        """Is the HTTP response whole, judged by its own framing?
+
+        Guessing at the tail does not work - a header ending in a digit reads
+        as a chunked terminator and truncates the reply. So the headers are
+        parsed first, then whichever length rule they declare:
+        Content-Length counts bytes, chunked ends at a zero-length chunk. If
+        neither is given, the peer closing or a gap in the stream decides,
+        back in the read loop.
+        """
+        data = cls._strip_urcs(raw)
+        split = data.find(b"\r\n\r\n")
+        if not data.startswith(b"HTTP/") or split < 0:
+            return False                    # headers not in yet
+
+        header = data[:split].lower()
+        body = data[split + 4:]
+
+        if b"transfer-encoding: chunked" in header:
+            # A zero on a line of its own, not merely a body ending in "0".
+            return body.rstrip().endswith(b"\r\n0")
+
+        at = header.find(b"content-length:")
+        if at >= 0:
+            try:
+                length = int(header[at + 15:].split(b"\r\n")[0].strip())
+            except ValueError:
+                return False
+            return len(body) >= length
+
+        return False
 
     @staticmethod
     def _strip_urcs(raw):
