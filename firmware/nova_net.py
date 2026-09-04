@@ -42,7 +42,7 @@ def _parse_url(url):
 
 class WiFi:
     def __init__(self, cfg, on_status=None):
-        self.networks = cfg.WIFI
+        self.cfg = cfg
         self.on_status = on_status or (lambda msg: None)
         self.wlan = network.WLAN(network.STA_IF)
         self.wlan.active(True)
@@ -53,8 +53,89 @@ class WiFi:
         except Exception:
             pass
 
+    @property
+    def networks(self):
+        """Provisioned networks first, then config.py's.
+
+        Read on every attempt rather than cached at construction, so a network
+        saved by the setup portal is used by the very next connect() without a
+        reboot. Duplicates are dropped by SSID, keeping the provisioned
+        password: someone standing at the door with the new password is a
+        better authority than a file flashed months ago.
+        """
+        try:
+            from nova_wifi_setup import saved_networks
+            nets = saved_networks()
+        except ImportError:
+            nets = []
+        seen = [s for s, _ in nets]
+        for pair in getattr(self.cfg, "WIFI", []):
+            if pair and pair[0] not in seen:
+                nets.append((pair[0], pair[1] if len(pair) > 1 else ""))
+        return nets
+
     def connected(self):
         return self.wlan.isconnected()
+
+    def ssid(self):
+        """The network actually carrying traffic, or None.
+
+        Read from the radio rather than remembered from connect(): after the
+        setup portal or a dashboard switch, what the device last decided and
+        what it is associated with can differ, and only the second one is worth
+        putting on the Devices page.
+        """
+        if not self.wlan.isconnected():
+            return None
+        try:
+            return self.wlan.config("essid") or None
+        except (OSError, ValueError):
+            return None
+
+    def scan(self, limit=20):
+        """[(ssid, rssi)] in range, strongest first, duplicates dropped.
+
+        Shared by the setup portal's dropdown and the dashboard's network list,
+        so the gym sees the same names in both places.
+        """
+        try:
+            found = self.wlan.scan()
+        except (OSError, RuntimeError):
+            return []
+        out = []
+        seen = []
+        for net in sorted(found, key=lambda n: n[3], reverse=True):
+            try:
+                name = net[0].decode("utf-8", "ignore").strip()
+            except AttributeError:
+                name = str(net[0]).strip()
+            if name and name not in seen:
+                seen.append(name)
+                out.append((name, net[3]))
+        return out[:limit]
+
+    def try_network(self, ssid, password, timeout_ms=15000):
+        """Connect to one network, right now, without saving anything.
+
+        The setup portal's proof that a credential works before it is written
+        to flash.
+        """
+        try:
+            if self.wlan.isconnected():
+                self.wlan.disconnect()
+            self.wlan.connect(ssid, password)
+        except OSError:
+            return False
+        deadline = time.ticks_add(time.ticks_ms(), timeout_ms)
+        while time.ticks_diff(deadline, time.ticks_ms()) > 0:
+            if self.wlan.isconnected():
+                return True
+            time.sleep_ms(250)
+        try:
+            self.wlan.disconnect()
+        except OSError:
+            pass
+        return False
 
     def rssi(self):
         try:
@@ -181,6 +262,16 @@ class Uplink:
 
     def rssi(self):
         return self.active.rssi() if self.active else None
+
+    def ssid(self):
+        """The Wi-Fi network in use, or None when the modem is carrying it."""
+        getter = getattr(self.active, "ssid", None)
+        return getter() if getter else None
+
+    def scan(self, limit=20):
+        """Networks in range, from the Wi-Fi radio whether or not it is the
+        active link - a door on 4G still has to be told where to move."""
+        return self.wifi.scan(limit) if self.wifi else []
 
     def status_text(self):
         if self.active:
@@ -350,7 +441,7 @@ class SupabaseDevice:
             "offline": offline,
         })
 
-    def sync(self, events, erased=None):
+    def sync(self, events, erased=None, wifi=None):
         """Drain the queue, refresh the cache, and confirm sensor erasures.
 
         `erased` is the slots deleted from the sensor since the last sync. They
@@ -358,11 +449,17 @@ class SupabaseDevice:
         closes a queue row once it is named — so a reset mid-erase just means
         the slot comes back on the next sync.
         """
-        return self._post("device-sync", {
+        payload = {
             "device_id": self.device_code,
             "events": events[:200],       # the function caps the batch anyway
             "erased": (erased or [])[:200],
-        })
+        }
+        # The answer to a Wi-Fi command the dashboard sent on an earlier sync:
+        # a scan's results, or whether a switch took. Carried on the round trip
+        # the device was making anyway rather than on a call of its own.
+        if wifi:
+            payload["wifi"] = wifi
+        return self._post("device-sync", payload)
 
     def poll_enrollment(self):
         data = self._post("fingerprint-assignment", {

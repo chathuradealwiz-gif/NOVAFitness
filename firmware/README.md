@@ -197,6 +197,44 @@ coverage or a data-less SIM; an IP of `0.0.0.0` is the wrong APN; and an
 `+HTTPACTION` status of 7xx is the modem's own DNS/TLS failure rather than
 anything Supabase said.
 
+### Setting the Wi-Fi password without a laptop
+
+A door cannot be told its Wi-Fi password over Wi-Fi it does not have yet, and
+the dashboard lives on an internet it cannot reach. So the terminal serves the
+setup page itself.
+
+It raises its own access point, `NOVA-SETUP-<device code>`, WPA2-protected with
+a password derived from `DEVICE_KEY`. A phone joins that network and opens
+`http://192.168.4.1/`, where a form lists the networks in range — filled from a
+scan, so nobody has to type an SSID correctly on a phone keyboard — and takes
+the password. **The network name, its password and the address are all on the
+terminal's screen while the portal runs**, which is the part a product without
+a display has to solve with a sticker.
+
+The credential is proved before it is kept: the terminal connects with it while
+the installer is still standing there, and only writes it to `wifi.json` once
+that succeeds. A typo fails at the form, not at the next reboot with nobody
+present. Saved networks are tried ahead of the `WIFI` list in `config.py`, so a
+router swap needs neither a laptop nor Thonny, and up to four are remembered — a
+gym that swaps back to its old router does not need reprovisioning.
+
+Two ways in:
+
+- **Staff:** Info → Device Health → Wi-Fi.
+- **At boot,** automatically, but only on a terminal that has never been given
+  a network. A provisioned door whose router is down for five minutes should
+  come back on its own, admitting members from the offline cache — not sit on a
+  setup screen serving nobody. `SETUP_PORTAL_ON_BOOT = True` offers it after
+  every failed boot instead.
+
+The window is bounded (`SETUP_PORTAL_TIMEOUT`, 300 s) and there is a Cancel
+button. A door left advertising a setup network is one anyone in range can
+point at their own router.
+
+There is no DNS responder, so no "sign in to network" popup appears — the
+address is on the screen instead. Adding one is about forty lines in
+`nova_wifi_setup.py` if the popup is wanted.
+
 ### Choosing the link
 
 `LINK` in `config.py` decides what carries device traffic:

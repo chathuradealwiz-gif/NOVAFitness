@@ -3,9 +3,19 @@
 # Copy to config.py on the ESP32 (Thonny: right-click > Rename after upload).
 # config.py holds the device key and MUST NOT be committed. See .gitignore.
 
+# Networks to try before the ones saved on the device, in order - the first
+# that connects wins.
+#
+# Empty is the right default for a terminal being installed: with no network
+# here and none in wifi.json, the first boot raises the setup portal by itself
+# (see SETUP_PORTAL_ENABLED below) and the gym's Wi-Fi is entered from a phone.
+# Nothing needs to be edited here at all.
+#
+# Fill it in for a bench board you reflash often, or to pre-load a fallback -
+# a phone hotspot, say - that should work on a terminal whose flash has just
+# been wiped.
 WIFI = [
-    ("YOUR_WIFI_SSID", "YOUR_WIFI_PASSWORD"),
-    # Add a phone hotspot as a fallback; the first one that connects wins.
+    # ("YOUR_WIFI_SSID", "YOUR_WIFI_PASSWORD"),
 ]
 
 # Supabase project. Both of these are safe to ship to the device:
@@ -130,7 +140,30 @@ MODEM_REGISTER_TIMEOUT = 90
 #           would have coped.
 #   "auto"  Wi-Fi first, modem when no configured SSID answers. What a
 #           deployed door should run.
-LINK = "auto"
+LINK = "wifi"
+
+# --- Wi-Fi setup portal -----------------------------------------------------
+# The door cannot be told its Wi-Fi password over Wi-Fi it does not have, and
+# the dashboard is on an internet it cannot reach. So it serves the form
+# itself: an access point named NOVA-SETUP-<device code>, a phone joined to
+# that, and http://192.168.4.1/. Both the network name and its password are
+# derived from DEVICE_KEY and shown on the terminal's screen while it runs.
+#
+# Credentials collected this way go to wifi.json on flash and are tried ahead
+# of the WIFI list above, so a router swap needs no laptop and no Thonny.
+SETUP_PORTAL_ENABLED = True
+
+# How long the access point stays up, in seconds. Bounded on purpose: a door
+# left advertising a setup network is one anyone in range can point at their
+# own router.
+SETUP_PORTAL_TIMEOUT = 300
+
+# Normally the portal opens at boot only on a terminal that has never been
+# given a network - a provisioned door whose router is briefly down should come
+# back on its own, admitting members from the offline cache, not sit on a setup
+# screen. True offers it after every failed boot instead. Either way, staff can
+# always reach it from Info > Device Health > Wi-Fi.
+SETUP_PORTAL_ON_BOOT = False
 
 # --- Behaviour --------------------------------------------------------------
 HEARTBEAT_SECONDS = 60

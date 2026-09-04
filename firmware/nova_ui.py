@@ -14,12 +14,18 @@ uppercase; at 240x320 that is as close as a bitmap font gets.
 
 from nova_display import (Display, WIDTH, HEIGHT, BLACK, SURFACE, CARD,
                           ELEVATED, BORDER, BORDER_HI, RED, RED_DEEP, TEXT,
-                          MUTED, WHITE, GREEN, AMBER)
+                          MUTED, DIM, WHITE, GREEN, AMBER)
 from nova_art import Fingerprint, finger_on_sensor
 import time
 
 HEADER_H = 44
 FOOTER_H = 24
+
+# The home screen's target disc: centred in the body, sized so the fingerprint
+# inside it clears the ring with room to breathe.
+HOME_CX = WIDTH // 2
+HOME_CY = 126
+HOME_R = 70
 
 # Health rows that fit between the verdict banner and the buttons.
 ROWS_PER_SCREEN = 13
@@ -73,10 +79,9 @@ class UI:
         self.d = Display(cfg)
         self.device_code = cfg.DEVICE_CODE
         self._footer = ""
-        # Two sizes: a small mark on the home card, a large one to animate on
-        # the scan and enrollment screens. Built once, reused for the life of
-        # the terminal (nova_art caches the row tables).
-        self.fp_small = Fingerprint(34, 44, weight=2)
+        # One mark, used on the home target and animated on the scan and
+        # enrollment screens. Built once, reused for the life of the terminal
+        # (nova_art caches the row tables).
         self.fp_large = Fingerprint(76, 96, weight=3)
         self._band = None          # current scan band row
         self._phase = 0            # finger-on-sensor phase
@@ -113,7 +118,7 @@ class UI:
         self.d.text(text.upper(), x, y, color, None, 1, 2)
 
     def watermark(self, y, bg=BLACK):
-        self.d.text_center(AUTHOR, y, MUTED, bg, 1, 0)
+        self.d.text_center(AUTHOR, y, DIM, bg, 1, 0)
 
     # --- screens ------------------------------------------------------------
     def splash(self, line=""):
@@ -131,45 +136,120 @@ class UI:
         self.d.text_center(line.upper()[:26], 224, MUTED, BLACK, 1, 1)
 
     def home(self, buttons, hint="Place finger to sign in", clock="", date=""):
+        """One thing to do, drawn as large as the panel allows.
+
+        The screen is a single instruction - put your finger here - so it is
+        built as one target rather than as a page of cards: a disc the width of
+        the panel's text column, the fingerprint centred in it, and the words
+        under it. A member reads the shape before they read anything.
+
+        The clock moved to the status bar at the foot. It was the largest type
+        on the terminal, which put the one thing nobody needs in order to use
+        the door at the top of the screen. `clock` and `date` are still taken
+        for callers that pass them, but home_status() is what paints them.
+        """
         d = self.d
         self.header()
         self.body()
-        # The clock is what members look at while they wait, so it gets the top
-        # of the screen and the largest type on the terminal.
-        d.round_frame(12, 54, WIDTH - 24, 62, CARD, BORDER, r=10)
-        self._clock_text = None
-        self.clock(clock, date)
-        # Scan card: the primary affordance, with the red accent rail on the
-        # left edge that .nova-card-accent gives the "today" cards on the web.
-        d.round_frame(12, 124, WIDTH - 24, 104, CARD, BORDER, r=10)
-        d.fill_rect(14, 138, 3, 76, RED)
-        self.label("Fingerprint", 28, 140)
-        d.text("READY", 28, 158, TEXT, CARD, 3, 3)
-        for i, line in enumerate(d.wrap(hint, 17)[:2]):
-            d.text(line, 28, 194 + i * 12, MUTED, CARD, 1, 0)
-        # The fingerprint mark sits inside the card, on the red rail's side of
-        # the panel, so "READY" and the thing you press are one object.
-        self.fp_small.draw(d, 180, 152, RED)
+
+        # Target disc. The ring is what makes it read as a place to press
+        # rather than as an illustration sitting on the background.
+        d.disc(HOME_CX, HOME_CY, HOME_R, CARD)
+        d.ring(HOME_CX, HOME_CY, HOME_R, BORDER_HI, 2)
+        d.ring(HOME_CX, HOME_CY, HOME_R - 7, BORDER, 1)
+        self.fp_large.draw(d, HOME_CX - self.fp_large.w // 2,
+                           HOME_CY - self.fp_large.h // 2, RED)
+
+        d.text_center("SCAN FINGER", 210, TEXT, BLACK, 2, 3)
+        for l in d.wrap(hint, 30)[:1]:
+            d.text_center(l, 230, MUTED, BLACK, 1, 0)
+
+        # The credit line, quieter than the hint above it. The 8x8 font has no
+        # half size, so the step down is carried by colour - but only one step:
+        # BORDER_HI is a line colour and vanished into the ground at this size.
+        self.watermark(240)
+
         for b in buttons:
             b.draw(d)
-        self.watermark(286)
 
     def clock(self, text, date=""):
-        """Repaint just the clock, so the minute can tick over without the home
-        screen being redrawn under a member's finger."""
+        """Repaint just the clock in the status bar, so the minute can tick
+        over without the home screen being redrawn under a member's finger."""
         if text == self._clock_text:
             return
         self._clock_text = text
         d = self.d
-        d.fill_rect(16, 58, WIDTH - 32, 54, CARD)
+        y = HEIGHT - FOOTER_H
+        d.fill_rect(8, y + 8, 150, 8, SURFACE)
         if text:
-            d.text_center(text, 62, TEXT, CARD, 4, 4)
+            d.text(text, 8, y + 8, TEXT, SURFACE, 1, 1)
             if date:
-                d.text_center(date.upper()[:26], 100, MUTED, CARD, 1, 1)
+                d.text(date.upper()[:9], 8 + d.text_w(text, 1, 1) + 8, y + 8,
+                       MUTED, SURFACE, 1, 0)
         else:
             # No clock until the first heartbeat: the board has no RTC battery,
             # and a wrong time is worse than none on the screen members read.
-            d.text_center("NOVA FITNESS", 76, MUTED, CARD, 2, 2)
+            d.text("--:--", 8, y + 8, MUTED, SURFACE, 1, 1)
+
+    def home_status(self, clock="", date="", link="", online=False, rssi=None,
+                    pending=0):
+        """The home screen's foot: time on the left, link on the right.
+
+        Replaces footer() on the home screen only. Every other screen keeps the
+        plain text footer, which is what the staff screens want - this one is
+        for a member glancing at a door, so it is a clock and two symbols.
+        """
+        d = self.d
+        y = HEIGHT - FOOTER_H
+        d.fill_rect(0, y, WIDTH, FOOTER_H, SURFACE)
+        d.hline(0, y, WIDTH, BORDER)
+        self._clock_text = None
+        self.clock(clock, date)
+
+        # Signal, as four bars filled by strength. -55 dBm or better is four,
+        # -85 or worse is one; anything at all beats a number nobody reads.
+        colour = GREEN if online else MUTED
+        bars = 0
+        if rssi is not None:
+            bars = 1 if rssi < -85 else 2 if rssi < -75 else 3 if rssi < -65 else 4
+        bx = WIDTH - 78
+        for i in range(4):
+            h = 3 + i * 2
+            d.fill_rect(bx + i * 4, y + 16 - h, 3, h,
+                        colour if i < bars else BORDER)
+
+        d.text((link or "----")[:4].upper(), bx + 20, y + 8,
+               colour if online else MUTED, SURFACE, 1, 1)
+
+        # Cloud: solid when the terminal is talking to NOVA, hollow when it is
+        # running from the offline cache. The queue depth rides on it, because
+        # "offline with 12 waiting" is the state staff need to notice.
+        cx, cy = WIDTH - 20, y + 12
+        cloud = GREEN if online else AMBER
+        d.fill_rect(cx - 7, cy, 15, 5, cloud)
+        d.fill_rect(cx - 4, cy - 3, 9, 3, cloud)
+        d.fill_rect(cx - 1, cy - 5, 5, 2, cloud)
+        if not online:
+            d.fill_rect(cx - 5, cy + 1, 11, 2, SURFACE)
+        if pending:
+            d.text("%d" % min(pending, 99), cx - 30, y + 8, AMBER, SURFACE, 1, 0)
+        self._footer = ""
+
+    def instructions(self, title, lines, buttons=()):
+        """A page of plain text in a card. An empty string is a blank line, so
+        the caller can group lines without this needing a paragraph model."""
+        d = self.d
+        self.header(title)
+        self.body()
+        d.round_frame(12, 54, WIDTH - 24, 194, CARD, BORDER, r=10)
+        d.fill_rect(14, 68, 3, 166, RED)
+        y = 70
+        for line in lines[:14]:
+            if line:
+                d.text(line[:27], 28, y, TEXT if y == 70 else MUTED, CARD, 1, 0)
+            y += 13
+        for b in buttons:
+            b.draw(d)
 
     # --- info / admin -------------------------------------------------------
     def info(self, buttons):
@@ -215,6 +295,39 @@ class UI:
             d.text(str(value)[:13], 118, y, color, CARD, 1, 0)
             y += 12
 
+        for b in buttons:
+            b.draw(d)
+
+    def portal(self, ssid, password, url, note="", buttons=()):
+        """Join-this-network instructions while the setup access point runs.
+
+        Everything needed to provision the door is on this screen, in the order
+        it is used: the network to join, its password, then the address. A
+        product without a display has to print these on a sticker and hope the
+        installer has not painted over it.
+        """
+        d = self.d
+        self.header("Wi-Fi Setup")
+        self.body()
+        d.round_frame(12, 52, WIDTH - 24, 122, CARD, BORDER, r=10)
+        d.fill_rect(14, 66, 3, 94, RED)
+
+        self.label("Join this network", 28, 62)
+        # The SSID carries the device code, so it is long. Two lines at scale 1
+        # beat one truncated line at scale 2: a name you cannot read is a name
+        # you cannot find in a phone's Wi-Fi list.
+        y = 78
+        for line in d.wrap(ssid, 26)[:2]:
+            d.text(line, 28, y, TEXT, CARD, 1, 0)
+            y += 12
+        self.label("Password", 28, y + 6)
+        d.text(password or "(open network)", 28, y + 22, TEXT, CARD, 1, 1)
+        self.label("Then open", 28, y + 42)
+        d.text(url, 28, y + 58, GREEN, CARD, 1, 0)
+
+        if note:
+            for i, line in enumerate(d.wrap(note, 30)[:2]):
+                d.text_center(line, 184 + i * 12, MUTED, BLACK, 1, 0)
         for b in buttons:
             b.draw(d)
 
