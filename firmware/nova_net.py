@@ -145,8 +145,17 @@ class Uplink:
     means you never learn whether the modem would have coped.
     """
 
+    MODES = ("wifi", "4g", "auto")
+
     def __init__(self, cfg, on_status=None):
-        self.mode = getattr(cfg, "LINK", "auto")
+        # Case and stray spaces forgiven: "Wifi" in config.py matched neither
+        # branch below, so both links were left as None and every request
+        # reported "offline" - a typo presenting as a hardware fault.
+        self.mode = str(getattr(cfg, "LINK", "auto")).strip().lower()
+        if self.mode not in self.MODES:
+            raise NetworkError(
+                "LINK is %r; expected one of %s"
+                % (getattr(cfg, "LINK", None), ", ".join(self.MODES)))
         self.on_status = on_status or (lambda msg: None)
         self.timeout = getattr(cfg, "HTTP_TIMEOUT", 12)
         self.wifi = None
