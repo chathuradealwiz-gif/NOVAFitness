@@ -24,9 +24,14 @@ from xpt2046 import Touch
 from fingerprint import (Fingerprint, FingerprintError, AURA_BREATHE, AURA_FLASH,
                          AURA_OFF, BLUE, PURPLE)
 from fingerprint import RED as AURA_RED
-from nova_net import WiFi, SupabaseDevice, NetworkError, iso_now
+from nova_net import Uplink, SupabaseDevice, NetworkError, iso_now
 from nova_store import Store
 
+
+# How often the sensor is imaged even though WAKEUP says no finger, so a dead
+# wake wire degrades to slower polling rather than to a door that ignores
+# everyone. See Terminal.finger_present().
+WAKE_SWEEP_MS = 1500
 
 DAYS = ("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")
 MONTHS = ("Jan", "Feb", "Mar", "Apr", "May", "Jun",
@@ -108,13 +113,23 @@ class Terminal:
         self.fp = Fingerprint(cfg)
         self.fp.aura(AURA_OFF, BLUE)
 
-        self.wifi = WiFi(cfg, on_status=self.ui.status_line)
+        # R307 WAKEUP, when it is wired. Pulled to the inactive level so an
+        # unpowered VT reads "no finger" rather than floating into a loop that
+        # images continuously.
+        wake_pin = getattr(cfg, "PIN_FP_WAKEUP", None)
+        self.fp_wake = (
+            Pin(wake_pin, Pin.IN,
+                Pin.PULL_DOWN if cfg.FP_WAKEUP_ACTIVE_HIGH else Pin.PULL_UP)
+            if wake_pin is not None else None)
+
+        self.wifi = Uplink(cfg, on_status=self.ui.status_line)
         self.api = SupabaseDevice(cfg, self.wifi)
 
         self.online = False
         self.last_heartbeat = 0
         self.last_poll = 0
         self._since_gc = 0
+        self._last_sweep = 0
         # Set whenever show_home() runs, so a nested screen can tell that
         # something underneath it (an enrollment started from the dashboard)
         # has already returned the terminal to the home screen.
@@ -122,19 +137,24 @@ class Terminal:
         # Last unhandled error from the main loop, surfaced on the health
         # screen: the one thing you want when the door misbehaved an hour ago.
         self.last_error = ""
+        # The answer to the dashboard's last Wi-Fi command, waiting for the
+        # next sync to carry it. None when there is nothing to say.
+        self._wifi_report = None
         self.boot_ticks = time.ticks_ms()
         self.buttons = self._home_buttons()
 
     # --- layout -------------------------------------------------------------
     def _home_buttons(self):
-        """One button only, and it is not an admin action.
+        """Two, side by side under the scan target.
 
-        Signing in needs no button - the idle loop watches the sensor - so the
-        home screen belongs to the member: the clock, the scan prompt, and Info.
-        Enrollment moved behind Info so a member cannot start it by accident.
+        Signing in needs no button - the idle loop watches the sensor - so
+        neither of these is the primary action; they are the two questions a
+        member or a staff member arrives with. Enrollment stays behind Admin so
+        a member cannot start it by accident.
         """
         return [
-            Button("Info", 12, 240, 216, 44, primary=True, key="INFO"),
+            Button("Admin", 12, 254, 105, 40, primary=True, key="INFO"),
+            Button("Help", 123, 254, 105, 40, key="HELP"),
         ]
 
     def _info_buttons(self):
@@ -177,8 +197,39 @@ class Terminal:
         self.home_shown = True
         clock, date = self.local_time()
         self.ui.home(self.buttons, hint, clock, date)
-        self.ui.footer(self.footer_text())
+        self.home_status()
         self.fp.aura(AURA_BREATHE, BLUE, 100)
+
+    def home_status(self):
+        """The home screen's own foot: clock, signal, cloud.
+
+        The staff screens keep the text footer - they want the device code and
+        the queue depth spelled out. A member at the door wants a clock and to
+        know the thing is alive.
+        """
+        clock, date = self.local_time()
+        self.ui.home_status(clock, date, self.link_name(), self.online,
+                            self.wifi.rssi(), self.store.pending())
+
+    def refresh_footer(self):
+        """Repaint whichever foot the screen underneath is wearing.
+
+        tick() runs from the home screen and from the nested staff screens
+        alike, and it is the one that learns the terminal has gone offline - so
+        it has to be told which of the two feet is on screen rather than
+        painting a text footer over the member's status bar.
+        """
+        if self.home_shown:
+            self.home_status()
+        else:
+            self.ui.footer(self.footer_text())
+
+    def link_name(self):
+        """WIFI, 4G, or nothing - whichever is carrying traffic right now."""
+        text = self.wifi.status_text()
+        if text.startswith("4G"):
+            return "4G"
+        return "WIFI" if self.wifi.connected() else ""
 
     # --- boot ---------------------------------------------------------------
     def boot(self):
@@ -194,18 +245,50 @@ class Terminal:
             except NetworkError as e:
                 self.ui.status_line(str(e)[:26])
                 time.sleep(2)
+        elif self.should_offer_setup():
+            # No network answered and none has ever been provisioned, so this
+            # is almost certainly a terminal being installed rather than a
+            # router having a bad morning. Offer the portal unprompted - there
+            # is nobody here who knows to go looking for it under Health.
+            self.wifi_setup()
+            if not self.wifi.connected():
+                self.ui.status_line("Offline mode")
+                time.sleep(2)
         else:
             self.ui.status_line("Offline mode")
             time.sleep(2)
         gc.collect()
         self.show_home()
 
+    def should_offer_setup(self):
+        """Whether boot should raise the portal on its own.
+
+        Deliberately not "whenever Wi-Fi fails": a provisioned door that loses
+        its router for five minutes should come back on its own, admitting
+        members from the cache, not sit on a setup screen serving nobody.
+        SETUP_PORTAL_ON_BOOT = True overrides that for sites that would rather
+        be asked every time.
+        """
+        if not getattr(cfg, "SETUP_PORTAL_ENABLED", True):
+            return False
+        if getattr(cfg, "SETUP_PORTAL_ON_BOOT", False):
+            return True
+        try:
+            from nova_wifi_setup import saved_networks
+            return not saved_networks() and not getattr(cfg, "WIFI", [])
+        except ImportError:
+            return False
+
     # --- background work ----------------------------------------------------
     def do_sync(self):
         """Drain the queue and refresh the offline cache in one round trip."""
         events = self.store.queued(200)
         reported = self.store.erased()
-        data = self.api.sync(events, reported)
+        data = self.api.sync(events, reported, self._wifi_report)
+        # Sent, so it is not sent twice. Kept until the post returns rather
+        # than cleared when it is built: a failed sync should re-report, not
+        # leave the dashboard waiting forever on a scan that did happen.
+        self._wifi_report = None
         accepted = data.get("accepted", [])
         if accepted:
             self.store.drop(accepted)
@@ -219,6 +302,71 @@ class Terminal:
             self.api.set_clock(data["server_time"])
         self.erase_slots(data.get("erase") or [])
         self.retry_backups()
+        # Last, because a Wi-Fi switch can take the link down mid-function and
+        # everything above it is work the gym is waiting on.
+        self.run_wifi_command(data.get("wifi_command"))
+
+    # --- wi-fi commands from the dashboard ----------------------------------
+    def run_wifi_command(self, cmd):
+        """Do what the Devices page asked, and keep the answer for the next sync.
+
+        Two actions, both of which the terminal could already do from its own
+        screen - this is the same code reached by someone who is not standing
+        in front of the door:
+
+          scan     list the networks in range, so staff can pick one from the
+                   dashboard instead of typing an SSID they cannot see.
+          connect  join a network and, only if that works, save it.
+
+        A switch that fails must not cost the gym its door. try_network()
+        leaves the radio disconnected on failure, so the old credentials are
+        re-tried immediately and the terminal comes back on the network it was
+        already using - the failure is reported, not suffered.
+        """
+        if not isinstance(cmd, dict):
+            return
+        action = cmd.get("action")
+        cmd_id = cmd.get("id")
+        link = getattr(self.wifi, "wifi", None)
+        if link is None:
+            self._wifi_report = {"id": cmd_id, "ok": False,
+                                 "error": "no Wi-Fi radio on this terminal"}
+            return
+
+        if action == "scan":
+            found = link.scan()
+            self._wifi_report = {
+                "id": cmd_id,
+                "ok": True,
+                "networks": [{"ssid": s, "rssi": r} for s, r in found],
+            }
+            return
+
+        if action == "connect":
+            ssid = (cmd.get("ssid") or "").strip()
+            if not ssid:
+                self._wifi_report = {"id": cmd_id, "ok": False,
+                                     "error": "no network named"}
+                return
+            password = cmd.get("password") or ""
+            previous = link.ssid()
+            self.ui.busy("Wi-Fi", "Switching to %s" % ssid[:18])
+            ok = link.try_network(ssid, password)
+            if ok:
+                from nova_wifi_setup import save_network
+                save_network(ssid, password)
+            else:
+                # Back to whatever was working. ensure() walks the saved list,
+                # which still has the old network at the front.
+                link.ensure()
+            self._wifi_report = {
+                "id": cmd_id,
+                "ok": ok,
+                "ssid": link.ssid(),
+                "error": None if ok else "could not join %s" % ssid[:24],
+            }
+            self.show_home("Wi-Fi: %s" % (ssid[:18] if ok else
+                                          "kept %s" % (previous or "offline")[:14]))
 
     def erase_slots(self, slots):
         """Delete the templates the dashboard asked us to erase.
@@ -246,32 +394,51 @@ class Terminal:
             self.store.mark_erased(done)
 
     def tick(self):
-        """Timed background work. Never raises into the main loop."""
+        """Timed background work. Never raises into the main loop.
+
+        Every interval here is measured from when the last call *finished*,
+        not when it started. Over 4G a round trip is seconds rather than
+        milliseconds, and stamping the timer first means a call that outlasts
+        its own interval is already overdue when it returns - so the loop goes
+        straight back into the network and never reaches the sensor again. The
+        door then ignores fingers entirely, which is exactly how this looked
+        on the bench: fine on Wi-Fi, dead on 4G.
+        """
+        # Only when WAKEUP is wired: without it finger_present() is always True
+        # and this would stop the heartbeat forever.
+        if self.fp_wake is not None and self.finger_present():
+            # Someone is at the sensor. Background work can wait a pass; they
+            # cannot.
+            return
+
         now = time.ticks_ms()
         if time.ticks_diff(now, self.last_heartbeat) > cfg.HEARTBEAT_SECONDS * 1000:
-            self.last_heartbeat = now
             try:
                 self.api.heartbeat(self.store.pending(), self.health_snapshot())
                 was_offline = not self.online
                 self.online = True
                 if was_offline or self.store.pending():
                     self.do_sync()
-                self.ui.footer(self.footer_text())
+                self.refresh_footer()
             except NetworkError:
                 if self.online:
                     self.online = False
-                    self.ui.footer(self.footer_text())
+                    self.refresh_footer()
+            self.last_heartbeat = time.ticks_ms()
 
         if time.ticks_diff(now, self.last_poll) > cfg.ENROLL_POLL_SECONDS * 1000:
-            self.last_poll = now
             if self.online:
                 try:
                     enrollment = self.api.poll_enrollment()
                 except NetworkError:
+                    self.last_poll = time.ticks_ms()
                     return
+                self.last_poll = time.ticks_ms()
                 if enrollment:
                     # Staff pressed "Enroll fingerprint" on the member's page.
                     self.run_enrollment(enrollment)
+            else:
+                self.last_poll = time.ticks_ms()
 
     # --- fingerprint sign-in ------------------------------------------------
     def sign_in(self, prompted=False):
@@ -667,6 +834,10 @@ class Terminal:
 
         snap["wifi"] = self.wifi.connected()
         snap["rssi"] = self.wifi.rssi()
+        # Which network, not just whether. The first question asked about a
+        # door that went quiet is what it was connected to, and until now the
+        # answer lived only on the terminal itself.
+        snap["ssid"] = self.wifi.ssid()
         snap["clock_synced"] = self.api.clock_synced
         snap["queue"] = self.store.pending()
         snap["pending_erasures"] = len(self.store.erased())
@@ -723,7 +894,7 @@ class Terminal:
         rows.append(("Touch", "OK", GREEN))
 
         if snap.get("wifi"):
-            rows.append(("Wi-Fi", self.wifi.status_text().replace("WiFi ", ""), GREEN))
+            rows.append(("Uplink", self.wifi.status_text().replace("WiFi ", ""), GREEN))
         else:
             fail("Wi-Fi", "Offline")
 
@@ -748,9 +919,13 @@ class Terminal:
 
     def health_screen(self):
         # Side by side: the checks fill the screen, leaving one button row.
+        # Wi-Fi setup lives here rather than on the Info menu: someone reaching
+        # for it has already been told the door is offline, and this is the
+        # screen that told them.
         buttons = [
-            Button("Re-check", 12, 250, 105, 40, key="REFRESH"),
-            Button("Back", 123, 250, 105, 40, key="BACK"),
+            Button("Re-check", 12, 250, 68, 40, key="REFRESH"),
+            Button("Wi-Fi", 86, 250, 68, 40, key="WIFI"),
+            Button("Back", 160, 250, 68, 40, key="BACK"),
         ]
         rows, faults = self.health_rows()
         self.ui.health(rows, faults, buttons)
@@ -782,10 +957,148 @@ class Terminal:
 
             if hit.key == "BACK":
                 return
+            if hit.key == "WIFI":
+                self.wifi_setup()
+                rows, faults = self.health_rows()
+                self.ui.health(rows, faults, buttons)
+                self.ui.footer(self.footer_text())
+                self.home_shown = False
             if hit.key == "REFRESH":
                 rows, faults = self.health_rows()
                 self.ui.health(rows, faults, buttons)
                 self.ui.footer(self.footer_text())
+
+    # --- help ----------------------------------------------------------------
+    def help_screen(self):
+        """What to do at the door, for the member who is stuck.
+
+        Deliberately not a manual: four lines about the finger itself, because
+        every failed scan at this door has been a finger placed lightly, at an
+        angle, or wet - never a member who needed to be told what a fingerprint
+        reader is.
+        """
+        lines = (
+            "Rest your finger flat on the",
+            "sensor and hold still until",
+            "the ring stops moving.",
+            "",
+            "Not working? Dry your finger",
+            "and try the same one you",
+            "registered with.",
+            "",
+            "Still stuck - ask at the desk.",
+        )
+        buttons = [Button("Back", 12, 254, 216, 40, primary=True, key="BACK")]
+        self.ui.instructions("Help", lines, buttons)
+        self.ui.footer(self.footer_text())
+        self.home_shown = False
+
+        while True:
+            try:
+                self.tick()
+            except Exception:
+                pass
+            if self.home_shown:
+                return
+            pos = self.touch.position()
+            if pos is None:
+                time.sleep_ms(30)
+                continue
+            hit = button_at(buttons, pos)
+            if hit is None:
+                self.touch.wait_release()
+                continue
+            self.buzzer.tap()
+            self.ui.flash(hit, self.touch)
+            self.show_home()
+            return
+
+    # --- wi-fi provisioning -------------------------------------------------
+    def wifi_setup(self, timeout_s=None):
+        """Run the setup access point until a network is saved or time is up.
+
+        The door is not usable while this runs - the AP, the HTTP server and
+        the STA connection attempts all want the one radio, and a fingerprint
+        scan in the middle of a channel switch is a scan that fails for reasons
+        nobody could ever debug. So the screen says so, and the window is
+        bounded: a terminal left advertising a setup network is a terminal
+        anyone in range can point at their own router.
+        """
+        limit = timeout_s or getattr(cfg, "SETUP_PORTAL_TIMEOUT", 300)
+        try:
+            from nova_wifi_setup import SetupPortal
+        except ImportError:
+            self.ui.message("Wi-Fi Setup", "nova_wifi_setup.py is not on the "
+                                           "device.", RED)
+            time.sleep(3)
+            return False
+
+        # Uplink holds the WiFi link; the portal needs it to prove a password
+        # before writing it to flash.
+        link = getattr(self.wifi, "wifi", None)
+        on_try = (lambda ssid, pw: link.try_network(ssid, pw)) if link else None
+
+        portal = SetupPortal(cfg, on_status=self.ui.status_line, on_try=on_try)
+        try:
+            ssid, password, url = portal.start()
+        except Exception as e:
+            self.ui.message("Wi-Fi Setup", str(e)[:60], RED)
+            time.sleep(3)
+            return False
+
+        cancel = [False]
+        buttons = [Button("Cancel", 12, 250, 216, 40, key="CANCEL")]
+        deadline = time.ticks_add(time.ticks_ms(), int(limit * 1000))
+        shown = [-1]
+
+        def tick():
+            left = time.ticks_diff(deadline, time.ticks_ms()) // 1000
+            # Repainted once a minute, not once a second: a full redraw takes
+            # long enough that doing it every second would eat the window it is
+            # counting down.
+            minutes = (left + 59) // 60
+            if minutes != shown[0]:
+                shown[0] = minutes
+                self.ui.portal(ssid, password, url,
+                               "Closes in %d min" % minutes, buttons)
+            pos = self.touch.position()
+            if pos is not None and button_at(buttons, pos) is not None:
+                self.buzzer.tap()
+                cancel[0] = True
+                return False
+            return True
+
+        try:
+            result = portal.run(limit, on_tick=tick)
+        except Exception as e:
+            self.last_error = str(e)[:60]
+            result = None
+        finally:
+            portal.stop()
+
+        if result:
+            self.buzzer.granted()
+            self.ui.message("Wi-Fi Saved", "Connected to %s." % result[0], GREEN)
+            time.sleep(2)
+            # The credential is proved and stored, so the rest of the boot
+            # sequence is exactly what a cold start would have done.
+            self.online = False
+            try:
+                if self.wifi.connect():
+                    self.api.heartbeat(self.store.pending(),
+                                       self.health_snapshot())
+                    self.online = True
+                    self.last_heartbeat = time.ticks_ms()
+                    self.do_sync()
+            except NetworkError as e:
+                self.last_error = str(e)[:60]
+            return True
+
+        if not cancel[0]:
+            self.ui.message("Wi-Fi Setup", "Nobody connected. The door keeps "
+                                           "working offline.", AMBER)
+            time.sleep(3)
+        return False
 
     # --- member lookup ------------------------------------------------------
     def lookup(self):
@@ -849,6 +1162,35 @@ class Terminal:
         self.show_home()
 
     # --- helpers ------------------------------------------------------------
+    def finger_present(self):
+        """Is a finger on the sensor? True when there is no way to tell.
+
+        With the R307's WAKEUP wired, this reads a pin: the sensor images only
+        when someone is actually there, so the capture light stops strobing and
+        a finger arriving between polls is still seen.
+
+        Without it, returning True keeps the old behaviour - image on every
+        pass and let get_image() report an empty platen - which is the honest
+        answer, because an unwired board genuinely cannot know.
+
+        A stuck-low pin - VT losing power, the blue wire breaking - would
+        otherwise make the door ignore every finger with no error anywhere: it
+        would simply stop working, quietly. So the sensor is still swept every
+        WAKE_SWEEP_MS regardless of the pin. That costs one wasted image every
+        second and a half, and it means a failed wire degrades to the old
+        polling behaviour instead of to a dead door.
+        """
+        if self.fp_wake is None:
+            return True
+        if bool(self.fp_wake.value()) == cfg.FP_WAKEUP_ACTIVE_HIGH:
+            return True
+
+        now = time.ticks_ms()
+        if time.ticks_diff(now, self._last_sweep) > WAKE_SWEEP_MS:
+            self._last_sweep = now
+            return True
+        return False
+
     def hold(self, ms):
         """Show a screen for a while, but let a tap cut it short."""
         deadline = time.ticks_add(time.ticks_ms(), ms)
@@ -873,6 +1215,8 @@ class Terminal:
                         self.ui.flash(hit, self.touch)
                         if hit.key == "INFO":
                             self.info_screen()
+                        elif hit.key == "HELP":
+                            self.help_screen()
                     else:
                         self.touch.wait_release()
                     continue
@@ -883,7 +1227,7 @@ class Terminal:
 
                 # Idle: a finger on the sensor signs in without touching anything.
                 try:
-                    if self.fp.get_image() == 0:
+                    if self.finger_present() and self.fp.get_image() == 0:
                         # Convert first, draw second. img2tz() is the step the
                         # finger has to stay still for, so anything drawn before
                         # it is added to how long the member must hold.

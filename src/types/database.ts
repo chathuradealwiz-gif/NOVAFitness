@@ -100,6 +100,9 @@ export type Device = {
   last_sync_at: string | null;
   health: DeviceHealth | null;
   health_reported_at: string | null;
+  /** Last scan the terminal reported, strongest first. Null until one runs. */
+  wifi_networks: WifiNetwork[] | null;
+  wifi_networks_at: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -128,12 +131,45 @@ export type DeviceHealth = {
   total_flash?: number;
   wifi?: boolean;
   rssi?: number | null;
+  /** The network carrying traffic, read from the radio. Null when offline. */
+  ssid?: string | null;
   clock_synced?: boolean;
   queue?: number;
   pending_erasures?: number;
   uptime_s?: number;
   last_error?: string;
 }
+
+export type WifiNetwork = {
+  ssid: string;
+  rssi: number | null;
+}
+
+/**
+ * A Wi-Fi scan or switch asked for from the Devices page.
+ *
+ * The terminal is outbound-only, so this is a message left for it rather than
+ * a call: it is collected on the next device-sync and answered on the one
+ * after.  is cleared the moment the device has used it.
+ */
+export type DeviceWifiCommand = {
+  id: string;
+  device_id: string;
+  action: "scan" | "connect";
+  ssid: string | null;
+  /** Never sent to the browser - see DeviceWifiCommandView. Cleared by the
+   *  Edge Function the moment the device has used it. */
+  password: string | null;
+  status: "pending" | "sent" | "done" | "failed" | "expired";
+  result: string | null;
+  requested_by: string | null;
+  created_at: string;
+  delivered_at: string | null;
+  completed_at: string | null;
+}
+
+/** What the dashboard is allowed to read: the command without its password. */
+export type DeviceWifiCommandView = Omit<DeviceWifiCommand, "password">;
 
 export type WorkoutPlan = {
   id: string;
@@ -307,6 +343,7 @@ export interface Database {
       financial_audit_logs: Row<FinancialAuditLog>;
       memberships: Row<Membership>;
       workout_files: Row<WorkoutFile>;
+      device_wifi_commands: Row<DeviceWifiCommand>;
     };
     Views: {
       // Whether each enrolled member's template is backed up off the sensor.
@@ -326,6 +363,7 @@ export interface Database {
         { allowed: boolean; reason: string }[]
       >;
       expire_stale_enrollments: Fn<Record<string, never>, number>;
+      expire_stale_wifi_commands: Fn<Record<string, never>, void>;
       claim_membership: Fn<
         { p_membership_id: string; p_full_name: string; p_phone: string },
         { status: string; member_id?: string }

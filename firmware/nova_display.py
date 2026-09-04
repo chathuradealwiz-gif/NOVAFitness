@@ -26,6 +26,10 @@ RED = rgb(0xFF, 0x1E, 0x3C)        # nova-red
 RED_DEEP = rgb(0xC1, 0x10, 0x2A)   # nova-redDeep
 TEXT = rgb(0xF2, 0xF2, 0xF5)       # nova-text
 MUTED = rgb(0x8E, 0x8E, 0x9C)      # nova-muted
+# One step below MUTED and still legible. BORDER_HI is a line colour: at 5:6:7
+# per channel it disappears into the black ground when it is used for 8px type,
+# which is what happened to the credit line.
+DIM = rgb(0x62, 0x62, 0x70)
 WHITE = rgb(0xFF, 0xFF, 0xFF)
 GREEN = rgb(0x22, 0xC5, 0x5E)      # granted state only
 AMBER = rgb(0xF5, 0x9E, 0x0B)
@@ -155,6 +159,31 @@ class Display:
             off = i * step
             self.fill_rect(x + inset, y + off, w - 2 * inset, step, color)
             self.fill_rect(x + inset, y + h - off - step, w - 2 * inset, step, color)
+
+    def disc(self, cx, cy, r, color):
+        """Filled circle, drawn as one fill_rect per row.
+
+        A row at a time rather than per pixel: every fill_rect is a window plus
+        a burst of colour, and 2r of those is fast where 3r^2 single pixels
+        would be visibly slow at this size.
+        """
+        for dy in range(-r, r + 1):
+            dx = int((r * r - dy * dy) ** 0.5)
+            self.fill_rect(cx - dx, cy + dy, 2 * dx + 1, 1, color)
+
+    def ring(self, cx, cy, r, color, weight=2):
+        """The outline of a circle, `weight` pixels thick."""
+        inner = max(0, r - weight)
+        for dy in range(-r, r + 1):
+            dx = int((r * r - dy * dy) ** 0.5)
+            if abs(dy) >= inner:
+                # The cap rows: solid, because the inner circle has no width
+                # left to subtract here.
+                self.fill_rect(cx - dx, cy + dy, 2 * dx + 1, 1, color)
+                continue
+            ix = int((inner * inner - dy * dy) ** 0.5)
+            self.fill_rect(cx - dx, cy + dy, dx - ix, 1, color)
+            self.fill_rect(cx + ix, cy + dy, dx - ix + 1, 1, color)
 
     def round_frame(self, x, y, w, h, fill, border, r=6):
         self.round_rect(x, y, w, h, border, r)

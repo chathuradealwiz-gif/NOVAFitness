@@ -3,9 +3,19 @@
 # Copy to config.py on the ESP32 (Thonny: right-click > Rename after upload).
 # config.py holds the device key and MUST NOT be committed. See .gitignore.
 
+# Networks to try before the ones saved on the device, in order - the first
+# that connects wins.
+#
+# Empty is the right default for a terminal being installed: with no network
+# here and none in wifi.json, the first boot raises the setup portal by itself
+# (see SETUP_PORTAL_ENABLED below) and the gym's Wi-Fi is entered from a phone.
+# Nothing needs to be edited here at all.
+#
+# Fill it in for a bench board you reflash often, or to pre-load a fallback -
+# a phone hotspot, say - that should work on a terminal whose flash has just
+# been wiped.
 WIFI = [
-    ("YOUR_WIFI_SSID", "YOUR_WIFI_PASSWORD"),
-    # Add a phone hotspot as a fallback; the first one that connects wins.
+    # ("YOUR_WIFI_SSID", "YOUR_WIFI_PASSWORD"),
 ]
 
 # Supabase project. Both of these are safe to ship to the device:
@@ -31,6 +41,26 @@ TZ_OFFSET_MINUTES = 330
 PIN_FP_TX = 17          # ESP32 TX -> sensor RX (green)
 PIN_FP_RX = 16          # ESP32 RX <- sensor TX (yellow)
 PIN_BUZZER = 4
+# Finger-present pin (R307 blue WAKEUP), or None to poll the sensor instead.
+#
+# Without it the idle loop calls get_image() over and over, and the sensor is
+# blind between calls - a finger arriving in that gap is simply not seen. The
+# blue capture light strobing is that polling made visible, and the gap grows
+# with anything slow in the loop, which on 4G means every enrollment poll.
+#
+# With it the loop reads a pin, images only when a finger is actually there,
+# and the light stops strobing.
+#
+# The white VT wire must go to 3.3 V: WAKEUP is the output of a touch circuit
+# that VT powers, and an unpowered one never asserts - indistinguishable from
+# a broken connection.
+PIN_FP_WAKEUP = None    # e.g. 41
+
+# Measure before trusting: idle low, rising on touch, is the common wiring -
+# but modules vary, and a backwards reading means the door images constantly
+# and never when asked.
+FP_WAKEUP_ACTIVE_HIGH = True
+
 
 # --- Fingerprint sensor -----------------------------------------------------
 # The R307 needs 4.2-6 V, so its VCC goes to the HW-688 buck's 5 V terminal -
@@ -69,8 +99,71 @@ PIN_TCH_IRQ = 38
 # run display-only on the bench.
 PIN_DOOR_RELAY = None   # e.g. 5
 PIN_REED = None         # e.g. 6
-DOOR_UNLOCK_MS = 4000
+DOOR_UNLOCK_MS = 2000    # long enough to push the door open before it re-locks
 RELAY_ACTIVE_HIGH = True
+
+# --- 4G modem (SIMCom A7670C, FS-MCore V1.2) --------------------------------
+# Secondary link, tried only when no Wi-Fi network answers. Set PIN_MODEM_TX to
+# None to leave the modem out entirely (bench boards without a SIM).
+#
+# The board is 5-16 V on VIN and draws 2.3 A peaks on transmit, so VIN goes to
+# the HW-688 5 V terminal at the same star point as the sensor - never the
+# ESP32's 5V pin, which browns the board out mid-registration. 470 uF + 100 nF
+# at the connector; the peak is short but it is the whole supply for 1-2 ms.
+#
+# UART on the FS-MCore has onboard level conversion referenced to VDD, so tie
+# the board's VDD/VREF pin to 3.3 V and the data lines connect direct.
+PIN_MODEM_TX = 18       # ESP32 TX -> modem RX
+PIN_MODEM_RX = 7        # ESP32 RX <- modem TX
+PIN_MODEM_PWRKEY = 40   # PWK: pulse low to toggle power. None if strapped on.
+PIN_MODEM_NET = None    # NET status LED pin, optional (e.g. 41)
+MODEM_UART = 1          # UART0 is the Thonny REPL, UART2 is the sensor
+MODEM_BAUD = 115200     # A7670C autobauds, but this is what it settles on
+
+# APN for your SIM. Sri Lanka: Dialog "dialogbb", Mobitel "mobitel3g",
+# Hutch "hutch3g", Airtel "airtelgprs.com". Most are open - leave user/pass
+# empty unless the operator says otherwise.
+MODEM_APN = "dialogbb"
+MODEM_APN_USER = ""
+MODEM_APN_PASS = ""
+
+# Registration is slow on a cold SIM: first attach after power-up can take a
+# minute in poor coverage, and failing early just makes the door look broken.
+MODEM_REGISTER_TIMEOUT = 90
+
+# Which uplink carries device traffic.
+#
+#   "wifi"  Wi-Fi only. Fails when the router is down; what the terminal did
+#           before the modem was fitted.
+#   "4g"    Modem only. Use this to test the 4G path with certainty - with
+#           "auto" a working router means you never learn whether the modem
+#           would have coped.
+#   "auto"  Wi-Fi first, modem when no configured SSID answers. What a
+#           deployed door should run.
+LINK = "wifi"
+
+# --- Wi-Fi setup portal -----------------------------------------------------
+# The door cannot be told its Wi-Fi password over Wi-Fi it does not have, and
+# the dashboard is on an internet it cannot reach. So it serves the form
+# itself: an access point named NOVA-SETUP-<device code>, a phone joined to
+# that, and http://192.168.4.1/. Both the network name and its password are
+# derived from DEVICE_KEY and shown on the terminal's screen while it runs.
+#
+# Credentials collected this way go to wifi.json on flash and are tried ahead
+# of the WIFI list above, so a router swap needs no laptop and no Thonny.
+SETUP_PORTAL_ENABLED = True
+
+# How long the access point stays up, in seconds. Bounded on purpose: a door
+# left advertising a setup network is one anyone in range can point at their
+# own router.
+SETUP_PORTAL_TIMEOUT = 300
+
+# Normally the portal opens at boot only on a terminal that has never been
+# given a network - a provisioned door whose router is briefly down should come
+# back on its own, admitting members from the offline cache, not sit on a setup
+# screen. True offers it after every failed boot instead. Either way, staff can
+# always reach it from Info > Device Health > Wi-Fi.
+SETUP_PORTAL_ON_BOOT = False
 
 # --- Behaviour --------------------------------------------------------------
 HEARTBEAT_SECONDS = 60

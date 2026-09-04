@@ -45,6 +45,8 @@ on Vercel, and nothing on the device to expose to the internet.
 | `nova_store.py` | Offline queue, authorisation cache and pending erasures on flash |
 | `calibrate.py` | Run once, prints the `TOUCH_CAL` numbers |
 | `selftest.py` | Bring-up check, subsystem by subsystem |
+| `test_modem.py` | Bench test for the A7670C 4G module, SIM through to HTTPS |
+| `test_relay.py` | Bench test for the solenoid relay |
 | `config.example.py` | Copy to `config.py` and fill in |
 
 ## Wiring — additions to the tested arrangement
@@ -63,8 +65,24 @@ driver did not change. What changed is the supply:
 | Black | GND | buck terminal, same star point |
 | Yellow | TXD | GPIO16 — 3.3 V logic, direct |
 | Green | RXD | GPIO17 — accepts 3.3 V |
-| Blue | WAKEUP | unconnected (the idle loop polls `get_image()`) |
-| White | VT (3.3 V touch supply) | unconnected |
+| Blue | WAKEUP | GPIO41 (`PIN_FP_WAKEUP`), or unconnected to poll instead |
+| White | VT (3.3 V touch supply) | **3.3 V** if WAKEUP is used, else unconnected |
+
+Leaving WAKEUP off is workable but has a cost worth understanding. The idle
+loop then calls `get_image()` repeatedly and the sensor is blind between
+calls — a finger arriving in the gap is not seen, which reads to a member as
+"it only works sometimes". The blue capture light strobing on and off *is*
+that polling: the R307 lights it while imaging, not as a standby indicator.
+The gap stretches with anything slow in the loop, and on 4G an enrollment poll
+is a fresh TLS handshake every `ENROLL_POLL_SECONDS`, so the sensor can be
+blind for most of each cycle.
+
+Wire it and the loop reads a pin instead, images only when a finger is really
+there, and the light stops strobing. **VT must go to 3.3 V** — WAKEUP is the
+output of a touch circuit VT powers, and unpowered it never asserts, which is
+indistinguishable from a broken wire. Measure the polarity before trusting
+`FP_WAKEUP_ACTIVE_HIGH`: backwards means the door images constantly and never
+when you want it to.
 
 The R503 ran on 3.3 V; **the R307 will not start below 4.2 V.** Its data lines
 stay 3.3 V TTL, so no level shifter is needed. Wire colours vary between
@@ -77,6 +95,169 @@ now has that headroom for the display.
 The R307 has no RGB ring, so `SENSOR_HAS_AURA = False` and `aura()` returns
 immediately instead of waiting out a timeout on every screen change. Nothing is
 lost: the TFT and buzzer already carried every cue the ring gave.
+
+### 4G modem (SIMCom A7670C, FS-MCore V1.2)
+
+Wi-Fi is the link the firmware uses today. The modem is the second route, and
+`test_modem.py` exercises it on its own before any of `main.py` depends on it.
+
+| A7670C pin | Function | Connects to |
+|---|---|---|
+| VIN | supply | **5 V at the HW-688 terminal**, same star point as the sensor |
+| GND | ground | buck terminal |
+| VDD | UART level reference | 3.3 V — the board level-shifts against this |
+| TX | modem TX | GPIO7 |
+| RX | modem RX | GPIO18 |
+| PWK | power key | GPIO40 — pulsed low to toggle power |
+| NET | network LED | unconnected (`PIN_MODEM_NET = None`) |
+| PEN | power enable | unconnected |
+
+GPIO7/18/40 were free; nothing above moves. The modem takes UART1 — UART0 is
+the Thonny REPL and UART2 is the fingerprint sensor, so all three coexist.
+
+**The supply is the part that bites.** The board peaks at **2.3 A** on transmit
+even though it idles near 20 mA, and those peaks land during registration and
+each TLS handshake. Off the ESP32's 5V pin it browns the board out mid-attach,
+which reads as a modem that answers `AT` and never registers. VIN goes to the
+buck, and 470 µF + 100 nF sit at the connector — the peak is short, but for
+1–2 ms it is the whole supply.
+
+Fit the antenna before powering up. Nano SIM, contacts toward the board, and
+the SIM needs a **data** plan: a voice-only SIM registers happily and then
+never gets an IP.
+
+### Testing it
+
+Set `MODEM_APN` in `config.py` for your operator (Dialog `dialogbb`, Mobitel
+`mobitel3g`, Hutch `hutch3g`, Airtel `airtelgprs.com`), then:
+
+```
+>>> import test_modem
+```
+
+It climbs a ladder — modem answers → SIM ready → signal → LTE registration →
+data context with an IP → an HTTPS POST of a real `/device-heartbeat`. The
+first FAIL is the one to fix; everything below it fails for the same reason.
+Helpers for when one sticks: `rf()` for a radio that reports no signal,
+`tls_probe()` for a handshake that will not complete, `post_socket()` to see a
+whole request and reply, `console()` for an `AT>` prompt.
+The last rung means the whole path works, not just that the radio attached, so
+**turn the Wi-Fi router off while testing** or you will not know which link
+carried it. `test_modem.console()` drops you at an `AT>` prompt for poking at a
+failure, and `test_modem.power_toggle()` pulses PWK if the board came up asleep.
+
+**Verified working** on a Dialog SIM: −71 dBm, registered on `41302`, APN
+`dialogbb`, a CGNAT address from `AT+CGPADDR`, and `HTTP/1.1 200 OK` from
+`/device-heartbeat` with a real `server_time` — the door's own request, over
+LTE, TLS and all.
+
+Two settings had to be right, and neither is a default. Both cost an evening,
+so they are written down rather than left in the code alone:
+
+| Setting | Why |
+|---|---|
+| `AT+CSSLCFG="enableSNI",0,1` | Supabase sits behind Cloudflare, where one IP serves thousands of certificates. Without the hostname in the handshake the server cannot pick one. SIMCom ships this **off**, which works against their single-certificate examples and fails against everything else. |
+| `AT+CSSLCFG="ignorelocaltime",0,1` | The modem has no battery-backed clock and reads 1970 until the network tells it otherwise, so every certificate looks not-yet-valid. `AT+CLTS=1` fixes the cause but only takes effect after a modem restart. |
+
+The same fault appeared three different ways and never once said "SNI":
+`+HTTPACTION: 1,715,0` from the AT HTTP stack, `+CCHOPEN: 0,15` from the
+socket, and — when the socket was opened with `client_type` 1 — a plaintext
+Cloudflare `400 The plain HTTP request was sent to HTTPS port`, which is the
+modem admitting it never wrapped the connection. `client_type` **2** is TLS.
+
+`tls_probe()` found it by trying the combinations against the real server
+rather than reasoning about error codes; it is still in the file for the next
+time a handshake fails.
+
+The AT HTTP stack (`AT+HTTPINIT` / `AT+HTTPACTION`) is **not** used and has
+been removed. Beyond being opaque on failure, `AT+HTTPPARA="USERDATA"` caps
+near 256 bytes — one Supabase JWT is most of that, and the three headers the
+Edge Functions need do not fit. Moving the anon key to a `?apikey=` query
+parameter made it fit and the gateway answered `401`. The socket path sends
+all three headers properly and gets its `200`.
+
+When the modem will not answer `AT` at all, work outward from the board rather
+than up the ladder. `test_modem.listen()` prints whatever it says unprompted —
+a healthy A7670C announces `RDY`, `+CPIN:` and `SMS DONE` a few seconds after
+power-up, so silence there means nothing is arriving on GPIO7 and garbage means
+the wrong baud rate, which `test_modem.scan_baud()` will find. Silence with the
+PWR LED lit is one of three things: TX/RX swapped, no common ground between the
+buck and the ESP32, or a VDD/VREF pad left unconnected — the onboard level
+shifter is referenced to it, and without 3.3 V there nothing crosses in either
+direction even though every other wire is right.
+
+PWK is driven open-drain, like a button to ground; it is never pulled up to
+3.3 V. Many FS-MCore boards power up on their own as soon as VIN arrives, so if
+the PWR LED is already lit, PWK is not what is wrong.
+
+Common outcomes: no reply to `AT` is TX/RX swapped or VIN not on the buck;
+`+CPIN: SIM PIN` is a PIN-locked card, not wiring; a `+CSQ` of 99 that clears
+within a few seconds is just the first scan, one that persists is the antenna; `CEREG 2` forever is
+coverage or a data-less SIM; an IP of `0.0.0.0` is the wrong APN; and an
+`+HTTPACTION` status of 7xx is the modem's own DNS/TLS failure rather than
+anything Supabase said.
+
+### Setting the Wi-Fi password without a laptop
+
+A door cannot be told its Wi-Fi password over Wi-Fi it does not have yet, and
+the dashboard lives on an internet it cannot reach. So the terminal serves the
+setup page itself.
+
+It raises its own access point, `NOVA-SETUP-<device code>`, WPA2-protected with
+a password derived from `DEVICE_KEY`. A phone joins that network and opens
+`http://192.168.4.1/`, where a form lists the networks in range — filled from a
+scan, so nobody has to type an SSID correctly on a phone keyboard — and takes
+the password. **The network name, its password and the address are all on the
+terminal's screen while the portal runs**, which is the part a product without
+a display has to solve with a sticker.
+
+The credential is proved before it is kept: the terminal connects with it while
+the installer is still standing there, and only writes it to `wifi.json` once
+that succeeds. A typo fails at the form, not at the next reboot with nobody
+present. Saved networks are tried ahead of the `WIFI` list in `config.py`, so a
+router swap needs neither a laptop nor Thonny, and up to four are remembered — a
+gym that swaps back to its old router does not need reprovisioning.
+
+Two ways in:
+
+- **Staff:** Info → Device Health → Wi-Fi.
+- **At boot,** automatically, but only on a terminal that has never been given
+  a network. A provisioned door whose router is down for five minutes should
+  come back on its own, admitting members from the offline cache — not sit on a
+  setup screen serving nobody. `SETUP_PORTAL_ON_BOOT = True` offers it after
+  every failed boot instead.
+
+The window is bounded (`SETUP_PORTAL_TIMEOUT`, 300 s) and there is a Cancel
+button. A door left advertising a setup network is one anyone in range can
+point at their own router.
+
+There is no DNS responder, so no "sign in to network" popup appears — the
+address is on the screen instead. Adding one is about forty lines in
+`nova_wifi_setup.py` if the popup is wanted.
+
+### Choosing the link
+
+`LINK` in `config.py` decides what carries device traffic:
+
+| `LINK` | Behaviour |
+|---|---|
+| `"wifi"` | Wi-Fi only — what the terminal did before the modem existed |
+| `"4g"` | Modem only — **use this to test 4G**, see below |
+| `"auto"` | Wi-Fi first, modem when no configured SSID answers. What a deployed door runs |
+
+Set `LINK = "4g"` when you want a conclusive test. Under `"auto"` a working
+router means the modem is never reached, so a green run tells you nothing
+about it — the same trap as testing a generator without cutting the mains.
+
+`nova_net.Uplink` holds both links and picks between them. It answers
+`ensure()`, `connect()`, `connected()`, `rssi()`, `status_text()` and
+`fetch()` exactly as the old `WiFi` class did, so `main.py`, `selftest.py` and
+every Edge Function call are unchanged — they cannot tell which link carried a
+request. A link that fails mid-request is dropped, so the next call re-runs
+the ladder and can fall through to the other one.
+
+`selftest.py` prints the mode it is running (`Uplink (4g)`), and the device
+health screen shows whichever link is live.
 
 Touch adds five wires:
 
@@ -99,8 +280,10 @@ The touch chip is on SPI bus 2 rather than sharing the panel's bus. The ILI9341
 runs at 40 MHz and the XPT2046 tops out near 2 MHz; sharing would mean
 re-clocking the bus on every touch poll, which shows as visible tearing.
 
-Optional door hardware (relay on GPIO5, reed switch on GPIO6) is off by default
-— set `PIN_DOOR_RELAY` / `PIN_REED` in `config.py` to enable it.
+The relay that drives the solenoid lock is on GPIO5 (`PIN_DOOR_RELAY`). A granted
+fingerprint pulses it for `DOOR_UNLOCK_MS` (1 s) and re-locks; no reed switch is
+fitted, so nothing waits on a door contact. Set `PIN_DOOR_RELAY` to `None` to
+run display-only on the bench.
 
 ## Setup
 

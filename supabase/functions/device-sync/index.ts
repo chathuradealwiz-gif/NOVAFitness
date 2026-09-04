@@ -15,6 +15,16 @@
 
 import { authenticateDevice, corsHeaders, json, markSeen, serviceClient } from "../_shared/device.ts";
 
+// The device's answer to a Wi-Fi command handed out on an earlier sync: a
+// scan's results, or whether a switch took.
+interface WifiReport {
+  id?: string;
+  ok?: boolean;
+  error?: string | null;
+  ssid?: string | null;
+  networks?: { ssid: string; rssi: number }[];
+}
+
 interface QueuedEvent {
   event_id: string;
   fingerprint_id: number;
@@ -28,7 +38,12 @@ Deno.serve(async (req) => {
 
   const supabase = serviceClient();
 
-  let body: { device_id: string; events?: QueuedEvent[]; erased?: number[] };
+  let body: {
+    device_id: string;
+    events?: QueuedEvent[];
+    erased?: number[];
+    wifi?: WifiReport;
+  };
   try {
     body = await req.json();
   } catch {
@@ -107,10 +122,68 @@ Deno.serve(async (req) => {
     allowed: m.status === "active" && !!m.membership_end && m.membership_end >= today,
   }));
 
-  await markSeen(supabase, device.id, {
+  // --- Wi-Fi: close out the last command, then hand over the next ----------
+  //
+  // Report first, so a device that answers and is immediately given another
+  // command does both in the right order, and a scan's results are on the
+  // device row before the dashboard is told the command finished.
+  const seenFields: Record<string, unknown> = {
     last_sync_at: new Date().toISOString(),
     pending_events: 0,
-  });
+  };
+
+  const report = body.wifi;
+  if (report && typeof report === "object") {
+    if (Array.isArray(report.networks)) {
+      seenFields.wifi_networks = report.networks
+        .filter((n) => n && typeof n.ssid === "string")
+        .slice(0, 30)
+        .map((n) => ({ ssid: n.ssid.slice(0, 64), rssi: Number(n.rssi) || null }));
+      seenFields.wifi_networks_at = new Date().toISOString();
+    }
+    if (report.id) {
+      await supabase
+        .from("device_wifi_commands")
+        .update({
+          status: report.ok ? "done" : "failed",
+          // A switch reports which network it ended up on, which is the useful
+          // half of a failure: "could not join X, still on Y".
+          result: report.ok
+            ? (report.ssid ? `connected to ${report.ssid}` : "done")
+            : (report.error ?? "failed"),
+          completed_at: new Date().toISOString(),
+          // The credential has been used or has failed; either way it has no
+          // business staying in the database.
+          password: null,
+        })
+        .eq("id", report.id)
+        .eq("device_id", device.id);
+    }
+  }
+
+  await markSeen(supabase, device.id, seenFields);
+
+  // Anything not collected within the window is dead - see the migration.
+  await supabase.rpc("expire_stale_wifi_commands");
+
+  const { data: command } = await supabase
+    .from("device_wifi_commands")
+    .select("id, action, ssid, password")
+    .eq("device_id", device.id)
+    .eq("status", "pending")
+    .order("created_at", { ascending: true })
+    .limit(1)
+    .maybeSingle();
+
+  if (command) {
+    // Marked sent before the response leaves, so a device that collects a
+    // command and then loses power does not get handed it again on every sync
+    // for the next quarter of an hour. It expires instead.
+    await supabase
+      .from("device_wifi_commands")
+      .update({ status: "sent", delivered_at: new Date().toISOString() })
+      .eq("id", command.id);
+  }
 
   return json({
     accepted,
@@ -118,5 +191,13 @@ Deno.serve(async (req) => {
     server_time: new Date().toISOString(),
     cache,
     erase: (pendingErasures ?? []).map((row) => row.fingerprint_id),
+    wifi_command: command
+      ? {
+          id: command.id,
+          action: command.action,
+          ssid: command.ssid,
+          password: command.password,
+        }
+      : null,
   });
 });

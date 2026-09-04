@@ -4,8 +4,9 @@ import { EmptyState, PageHeader } from "@/components/ui";
 import { FingerprintArt } from "@/components/illustrations";
 import { formatDateTime } from "@/lib/format";
 import { DeviceHealthPanel } from "./DeviceHealth";
+import { DeviceWifiPanel } from "./DeviceWifi";
 import { AutoRefresh } from "@/components/AutoRefresh";
-import type { Device } from "@/types/database";
+import type { Device, DeviceWifiCommandView } from "@/types/database";
 
 // A device that has not sent a heartbeat in this window is treated as offline,
 // regardless of the last status it reported.
@@ -17,11 +18,26 @@ const STALE_MS = 3 * 60 * 1000;
 export const dynamic = "force-dynamic";
 
 export default async function DevicesPage() {
-  await requireStaff();
+  const session = await requireStaff();
   const supabase = createClient();
 
   const { data } = await supabase.from("devices").select("*").order("device_code");
   const devices = (data ?? []) as Device[];
+
+  // The most recent Wi-Fi request per device, whatever became of it: one that
+  // is still waiting drives the panel's state, and a finished one is the answer
+  // staff came to read. Fetched in one query rather than per card.
+  const { data: wifiRows } = await supabase
+    .from("device_wifi_commands")
+    // Explicitly not "*": the password column never leaves the server.
+    .select("id, device_id, action, ssid, status, result, requested_by, created_at, delivered_at, completed_at")
+    .order("created_at", { ascending: false })
+    .limit(50);
+
+  const latestWifi = new Map<string, DeviceWifiCommandView>();
+  for (const row of (wifiRows ?? []) as DeviceWifiCommandView[]) {
+    if (!latestWifi.has(row.device_id)) latestWifi.set(row.device_id, row);
+  }
 
   // How many enrolled members could survive losing a sensor. The view carries
   // no template bytes — only whether each member has one — because staff need
@@ -118,6 +134,12 @@ export default async function DevicesPage() {
                     }
                   />
                 </dl>
+
+                <DeviceWifiPanel
+                  device={device}
+                  isSuperAdmin={session.isSuperAdmin}
+                  command={latestWifi.get(device.id) ?? null}
+                />
 
                 <DeviceHealthPanel device={device} />
               </article>

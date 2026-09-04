@@ -175,13 +175,16 @@ class Fingerprint:
         of one read is regularly the head of the next packet.
         """
         deadline = time.ticks_add(time.ticks_ms(), timeout_ms)
-        buf = self._buf
 
         while True:
+            buf = self._buf
+
             # Resynchronise on the EF 01 packet header.
             #
-            # MicroPython on this ESP32-S3 build does not provide
-            # bytearray.find(), so search for EF 01 manually.
+            # MicroPython on this ESP32-S3 build provides neither
+            # bytearray.find() nor slice deletion, so the header is searched for
+            # by hand and consumed bytes are dropped by rebinding to a slice -
+            # `del buf[:n]` raises TypeError on this port.
             idx = -1
 
             for i in range(len(buf) - 1):
@@ -190,7 +193,14 @@ class Fingerprint:
                     break
 
             if idx > 0:
-                del buf[:idx]
+                buf = bytearray(buf[idx:])
+                self._buf = buf
+            elif idx < 0 and len(buf) > 1:
+                # No header anywhere in what has arrived. Keep only the last
+                # byte: it may be an 0xEF whose 0x01 is still in flight, and
+                # without this the buffer grows for the whole of a timeout.
+                buf = bytearray(buf[-1:])
+                self._buf = buf
 
             if len(buf) >= 9:
                 length = (buf[7] << 8) | buf[8]
@@ -198,7 +208,7 @@ class Fingerprint:
 
                 if len(buf) >= total:
                     pkt = bytes(buf[:total])
-                    del buf[:total]
+                    self._buf = bytearray(buf[total:])
                     return pkt[6], pkt[9:total - 2]
 
             if time.ticks_diff(deadline, time.ticks_ms()) <= 0:
