@@ -180,7 +180,7 @@ class UI:
         self._clock_text = text
         d = self.d
         y = HEIGHT - FOOTER_H
-        d.fill_rect(8, y + 8, 150, 8, SURFACE)
+        d.fill_rect(8, y + 8, 138, 8, SURFACE)   # up to the queue count at 152
         if text:
             d.text(text, 8, y + 8, TEXT, SURFACE, 1, 1)
             if date:
@@ -212,7 +212,7 @@ class UI:
         bars = 0
         if rssi is not None:
             bars = 1 if rssi < -85 else 2 if rssi < -75 else 3 if rssi < -65 else 4
-        bx = WIDTH - 78
+        bx = WIDTH - 62
         for i in range(4):
             h = 3 + i * 2
             d.fill_rect(bx + i * 4, y + 16 - h, 3, h,
@@ -221,18 +221,11 @@ class UI:
         d.text((link or "----")[:4].upper(), bx + 20, y + 8,
                colour if online else MUTED, SURFACE, 1, 1)
 
-        # Cloud: solid when the terminal is talking to NOVA, hollow when it is
-        # running from the offline cache. The queue depth rides on it, because
-        # "offline with 12 waiting" is the state staff need to notice.
-        cx, cy = WIDTH - 20, y + 12
-        cloud = GREEN if online else AMBER
-        d.fill_rect(cx - 7, cy, 15, 5, cloud)
-        d.fill_rect(cx - 4, cy - 3, 9, 3, cloud)
-        d.fill_rect(cx - 1, cy - 5, 5, 2, cloud)
-        if not online:
-            d.fill_rect(cx - 5, cy + 1, 11, 2, SURFACE)
+        # The queue count and nothing else. There was a cloud glyph here saying
+        # online or offline, which the bars and the link label already say -
+        # three symbols for one fact, on the strip a member glances at.
         if pending:
-            d.text("%d" % min(pending, 99), cx - 30, y + 8, AMBER, SURFACE, 1, 0)
+            d.text("%d" % min(pending, 99), 152, y + 8, AMBER, SURFACE, 1, 0)
         self._footer = ""
 
     def instructions(self, title, lines, buttons=()):
@@ -449,8 +442,29 @@ class UI:
         d.fill_rect(12, 58, WIDTH - 24, 4, accent)
         d.text_center(title.upper()[:14], 88, accent, CARD, 3, 3)
         if name:
-            for i, line in enumerate(d.wrap(name, 19)[:2]):
-                d.text_center(line, 132 + i * 18, TEXT, CARD, 2, 1)
+            # A name is wrapped by how wide it actually draws, not by a
+            # character count: at scale 2 a character is 17px, so the old
+            # 19-column wrap produced lines 323px wide on a 240px panel and
+            # text_center cut them at both ends. Long names step down a size
+            # rather than losing their first and last letters - a member reads
+            # their own name to check the door recognised the right person.
+            inner = WIDTH - 44
+            scale, spacing = 2, 1
+            cols = max(1, inner // (8 * scale + spacing))
+            lines = d.wrap(name, cols)
+            if len(lines) > 2:
+                scale, spacing = 1, 1
+                cols = max(1, inner // (8 * scale + spacing))
+                lines = d.wrap(name, cols)
+            leading = 18 if scale == 2 else 12
+            y = 132 + (0 if len(lines) > 1 else 4)
+            for line in lines[:2]:
+                # wrap() cannot break a single word, so one long enough to
+                # overflow on its own is still clipped here - but clipped at
+                # the end, where it reads as truncation rather than as a
+                # rendering fault.
+                d.text_center(line[:cols], y, TEXT, CARD, scale, spacing)
+                y += leading
         y = 176
         for line in d.wrap(detail, 26)[:2]:
             d.text_center(line, y, MUTED, CARD, 1, 0)

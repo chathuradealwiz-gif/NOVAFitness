@@ -99,7 +99,7 @@ PIN_TCH_IRQ = 38
 # run display-only on the bench.
 PIN_DOOR_RELAY = None   # e.g. 5
 PIN_REED = None         # e.g. 6
-DOOR_UNLOCK_MS = 1000
+DOOR_UNLOCK_MS = 2000    # long enough to push the door open before it re-locks
 RELAY_ACTIVE_HIGH = True
 
 # --- 4G modem (SIMCom A7670C, FS-MCore V1.2) --------------------------------
