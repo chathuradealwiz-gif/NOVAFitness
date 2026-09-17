@@ -16,6 +16,7 @@ import network
 import socket
 import ssl
 import json
+import gc
 import time
 import machine
 import ubinascii
@@ -197,6 +198,15 @@ class WiFi:
                 if not part:
                     break
                 chunks.append(part)
+            # The join below is the one allocation in a request that needs the
+            # WHOLE response as a single contiguous block - the chunks
+            # themselves never do. On a small heap that is where a sync of a
+            # large member cache fails ("memory allocation failed, allocating
+            # N bytes", N being the response size). Collecting first is not a
+            # fix, only headroom: MicroPython's GC frees but does not compact,
+            # so a fragmented heap can still refuse the block. The fix is a
+            # build with the PSRAM in the heap - see firmware/README.md.
+            gc.collect()
             return b"".join(chunks)
         except OSError as e:
             raise NetworkError("%s: %s" % (host, e))

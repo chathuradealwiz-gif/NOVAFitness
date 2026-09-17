@@ -301,7 +301,14 @@ class Terminal:
         if data.get("server_time"):
             self.api.set_clock(data["server_time"])
         self.erase_slots(data.get("erase") or [])
-        self.retry_backups()
+        # Belt and braces around retry_backups' own handling: an upload that
+        # fails in a way not foreseen there must still not cost the gym the
+        # Wi-Fi command below, which is the only way to fix a door whose
+        # router has changed without walking to it.
+        try:
+            self.retry_backups()
+        except Exception as e:
+            self.last_error = "backup: %s" % str(e)[:48]
         # Last, because a Wi-Fi switch can take the link down mid-function and
         # everything above it is work the gym is waiting on.
         self.run_wifi_command(data.get("wifi_command"))
@@ -629,13 +636,22 @@ class Terminal:
         behind a backlog of uploads.
         """
         for member_id, slot in self.store.pending_backups()[:limit]:
+            # A template plus its base64 and the JSON around it is the largest
+            # allocation this firmware makes. Collecting first asks for it
+            # against a tidy heap rather than whatever the last upload left.
+            gc.collect()
             try:
                 self.upload_backup(member_id, slot)
             except NetworkError:
                 return                   # still offline; leave the rest queued
-            except (FingerprintError, OSError):
-                # The slot is gone or the sensor is busy. Dropping it would lose
-                # the backup silently, so leave it queued for the next pass.
+            except (FingerprintError, OSError, MemoryError):
+                # The slot is gone, the sensor is busy, or the heap could not
+                # find one contiguous block for the upload. Dropping it would
+                # lose the backup silently, so leave it queued for the next
+                # pass. MemoryError is in here because it is NOT an OSError:
+                # uncaught, it left the rest of do_sync unrun - including the
+                # Wi-Fi command, which is how the dashboard reaches a door
+                # nobody is standing at.
                 continue
 
     def enroll_pressed(self):
