@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { Logo } from "@/components/Logo";
 import { IconLogout } from "@/components/icons";
 import { DashboardNav } from "./DashboardNav";
+import { ScanToast } from "./ScanToast";
 
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
   const session = await requireStaff();
@@ -49,6 +50,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
       </div>
 
       <DashboardNav isSuperAdmin={session.isSuperAdmin} variant="bottom" />
+      <ScanToast />
     </div>
   );
 }

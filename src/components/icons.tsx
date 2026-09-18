@@ -164,6 +164,18 @@ export const IconPlus = (p: IconProps) => (
   </Svg>
 );
 
+export const IconCheck = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M5 12.5l4.5 4.5L19 7.5" />
+  </Svg>
+);
+
+export const IconX = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M6 6l12 12M18 6L6 18" />
+  </Svg>
+);
+
 export const IconFingerprint = (p: IconProps) => (
   <Svg {...p}>
     <path d="M5 12a7 7 0 0 1 14 0v3" />
